@@ -268,8 +268,25 @@ function particles(rx, ry, rw, rh, color, mol, tick, idx) {
 
 // ── RENDER ────────────────────────────────────────
 function render() {
+  // Save focused element info
+  var focusedId = document.activeElement ? document.activeElement.id : null;
+  var focusedValue = document.activeElement ? document.activeElement.value : null;
+  var focusedType = document.activeElement ? document.activeElement.type : null;
+  
   renderTabs();
   renderContent();
+  
+  // Restore focus to input if it was focused (user was typing)
+  if(focusedId && focusedType === 'number') {
+    var el = document.getElementById(focusedId);
+    if(el) {
+      el.focus();
+      // Restore the value they were typing (not the state value)
+      if(focusedValue !== null) el.value = focusedValue;
+      // Put cursor at end
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch(e){}
+    }
+  }
 }
 
 function renderTabs() {
@@ -463,10 +480,12 @@ function renderD1() {
         </div>
         <div class="sep"></div>
         <div class="badge"><span class="badge-lbl">Toplam V</span>
-          <input type="number" value="${d.totalV}" min="2" max="30" step="0.5" oninput="d1SetTotalV(this.value)"
-            style="width:50px;padding:1px 4px;border-radius:5px;border:1px solid #e2e8f0;font-size:12px;font-weight:700;text-align:right;color:#0ea5e9;background:#f8fafc;outline:none"/>
+          <input type="number" id="d1tv" value="${d.totalV}" min="2" max="30" step="0.5"
+            style="width:50px;padding:1px 4px;border-radius:5px;border:1px solid #e2e8f0;font-size:12px;font-weight:700;text-align:right;color:#0ea5e9;background:#f8fafc;outline:none"
+            onkeydown="if(event.key==='Enter'){d1SetTotalV(this.value);this.blur();}"
+            onblur="d1SetTotalV(this.value)"/>
           <span style="font-size:9px;color:#94a3b8">L</span>
-          <input type="range" min="2" max="30" step="0.5" value="${d.totalV}" oninput="d1SetTotalV(this.value)" style="width:60px;accent-color:#0ea5e9"/>
+          <input type="range" id="d1tvr" min="2" max="30" step="0.5" value="${d.totalV}" oninput="d1SetTotalV(this.value);document.getElementById('d1tv')&&(document.getElementById('d1tv').value=this.value);" style="width:60px;accent-color:#0ea5e9"/>
         </div>
         <div class="sep"></div>
         <div class="badge"><span class="badge-lbl">Ortak P</span><span class="badge-val" style="color:#6366f1">${P.toFixed(3)} atm</span></div>
@@ -477,9 +496,9 @@ function renderD1() {
           <button class="pill" onclick="d1ToggleLeft()" style="background:${d.leftOpen?"#dcfce7":"#f1f5f9"};color:${d.leftOpen?"#15803d":"#94a3b8"};outline:${d.leftOpen?"1.5px solid #22c55e":"none"}">${d.leftOpen?"Açık":"Kapalı"}</button>
           ${d.leftOpen?`
             <button class="round" onclick="d1RemoveLeft()" style="background:#fee2e2;color:#dc2626">−</button>
-            <span style="font-size:10px;color:#64748b;min-width:32px">${d.molAddL}mol</span>
+            <span id="d1mll" style="font-size:10px;color:#64748b;min-width:32px">${d.molAddL}mol</span>
             <button class="round" onclick="d1AddLeft()" style="background:#dcfce7;color:#16a34a">+</button>
-            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddL}" oninput="d1SetMolL(this.value)" style="width:50px;accent-color:#22c55e"/>
+            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddL}" oninput="state.d1.molAddL=parseFloat(this.value);var s=document.getElementById('d1mll');if(s)s.textContent=parseFloat(this.value).toFixed(2)+'mol';" style="width:50px;accent-color:#22c55e"/>
           `:""}
         </div>
         <div class="sep"></div>
@@ -488,9 +507,9 @@ function renderD1() {
           <button class="pill" onclick="d1ToggleRight()" style="background:${d.rightOpen?"#dcfce7":"#f1f5f9"};color:${d.rightOpen?"#15803d":"#94a3b8"};outline:${d.rightOpen?"1.5px solid #22c55e":"none"}">${d.rightOpen?"Açık":"Kapalı"}</button>
           ${d.rightOpen?`
             <button class="round" onclick="d1RemoveRight()" style="background:#fee2e2;color:#dc2626">−</button>
-            <span style="font-size:10px;color:#64748b;min-width:32px">${d.molAddR}mol</span>
+            <span id="d1mlr" style="font-size:10px;color:#64748b;min-width:32px">${d.molAddR}mol</span>
             <button class="round" onclick="d1AddRight()" style="background:#dcfce7;color:#16a34a">+</button>
-            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddR}" oninput="d1SetMolR(this.value)" style="width:50px;accent-color:#22c55e"/>
+            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddR}" oninput="state.d1.molAddR=parseFloat(this.value);var s=document.getElementById('d1mlr');if(s)s.textContent=parseFloat(this.value).toFixed(2)+'mol';" style="width:50px;accent-color:#22c55e"/>
           `:""}
         </div>
       </div>
@@ -851,7 +870,8 @@ function renderRealGas() {
 // Range: update immediately
 let _slId = 0;
 function sliderHTML(label, value, min, max, step, unit, color, onchange) {
-  const id = 'sl' + (++_slId);
+  // Use stable ID based on label to preserve focus across renders
+  const id = 'sl_' + label.replace(/[^a-zA-Z0-9]/g,'_');
   // escape onchange for attribute context
   const oc = onchange.replace(/"/g,"'");
   return `
