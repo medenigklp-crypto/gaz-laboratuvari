@@ -1,103 +1,92 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, AreaChart, Area, ScatterChart, Scatter,
-  PieChart, Pie, Cell
-} from "recharts";
+import { useState, useEffect, useRef } from "react";
 
-// ═══════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// CONSTANTS & HELPERS (ortak)
+// ══════════════════════════════════════════════════════════════
 const R = 0.0821;
-const NA = 6.022e23;
-const KB = 1.38e-23;
 
 const GAS_PRESETS = [
-  { label:"He",  color:"#f87171", molar:4,  a:0.034, b:0.0237 },
-  { label:"H₂",  color:"#fb923c", molar:2,  a:0.244, b:0.0266 },
-  { label:"N₂",  color:"#facc15", molar:28, a:1.39,  b:0.0391 },
-  { label:"O₂",  color:"#4ade80", molar:32, a:1.36,  b:0.0318 },
-  { label:"CH₄", color:"#60a5fa", molar:16, a:2.25,  b:0.0428 },
-  { label:"Ne",  color:"#c084fc", molar:20, a:0.211, b:0.0171 },
-  { label:"CO₂", color:"#f472b6", molar:44, a:3.59,  b:0.0427 },
+  { label:"He",  color:"#ef4444", molar:4  },
+  { label:"H₂",  color:"#f97316", molar:2  },
+  { label:"N₂",  color:"#eab308", molar:28 },
+  { label:"O₂",  color:"#22c55e", molar:32 },
+  { label:"CH₄", color:"#3b82f6", molar:16 },
+  { label:"Ne",  color:"#a855f7", molar:20 },
+  { label:"CO₂", color:"#ec4899", molar:44 },
 ];
 
-// Soft pastel fills for chambers (like textbook)
-const CHAMBER_FILLS = [
-  { bg:"#fff0f0", border:"#f87171", particle:"#ef4444" },
-  { bg:"#fffbeb", border:"#f59e0b", particle:"#d97706" },
-  { bg:"#f0fdf4", border:"#4ade80", particle:"#16a34a" },
-  { bg:"#eff6ff", border:"#60a5fa", particle:"#2563eb" },
+const GAS_LIST_D24 = [
+  { label:"He",  color:"#a78bfa", bg:"#ede9fe" },
+  { label:"H₂",  color:"#eab308", bg:"#fefce8" },
+  { label:"N₂",  color:"#34d399", bg:"#d1fae5" },
+  { label:"O₂",  color:"#fb923c", bg:"#ffedd5" },
+  { label:"CH₄", color:"#6366f1", bg:"#eef2ff" },
+  { label:"Ne",  color:"#f472b6", bg:"#fce7f3" },
+  { label:"SO₃", color:"#f87171", bg:"#fee2e2" },
+  { label:"CO₂", color:"#94a3b8", bg:"#f1f5f9" },
+];
+
+const CHAMBER_COLORS = [
+  { fill:"#dbeafe", stroke:"#93c5fd", particle:"#1d4ed8" },
+  { fill:"#dcfce7", stroke:"#86efac", particle:"#15803d" },
+  { fill:"#fef9c3", stroke:"#fde047", particle:"#a16207" },
+  { fill:"#fce7f3", stroke:"#f9a8d4", particle:"#be185d" },
 ];
 
 const TABS = [
-  { id:"sim",     icon:"🔬", label:"Simülasyon"        },
-  { id:"graphs",  icon:"📊", label:"Grafikler"         },
-  { id:"maxwell", icon:"⚡", label:"Maxwell-Boltzmann"  },
-  { id:"edu",     icon:"🎓", label:"Eğitim Modu"       },
-  { id:"realgas", icon:"⚗️", label:"Gerçek Gaz"        },
+  { id:"d1", icon:"🧪", label:"Düzenek 1" },
+  { id:"d2", icon:"🔗", label:"Düzenek 2" },
+  { id:"d3", icon:"🚧", label:"Düzenek 3" },
+  { id:"d4", icon:"🫧", label:"Düzenek 4" },
+  { id:"edu", icon:"🎓", label:"Eğitim" },
 ];
 
-// ═══════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════
 const idealP  = (n,T,V) => V>0&&n>0 ? (n*R*T)/V : 0;
-const vdwP    = (n,T,V,a,b) => { const Vm=V/n; if(Vm<=b||n<=0)return 0; return (R*T)/(Vm-b)-a/(Vm*Vm); };
-const gasObj  = (label) => GAS_PRESETS.find(g=>g.label===label)||GAS_PRESETS[0];
-const tempClr = (T) => { const t=Math.max(0,Math.min(1,(T-50)/950)); return `hsl(${Math.round(240-t*240)},80%,50%)`; };
-const pClr    = (P) => { const t=Math.max(0,Math.min(1,P/5)); return `hsl(${Math.round(120-t*120)},70%,45%)`; };
+const gasObj  = l => GAS_PRESETS.find(g=>g.label===l)||GAS_PRESETS[0];
+const gasInfoD24 = l => GAS_LIST_D24.find(g=>g.label===l)||GAS_LIST_D24[0];
+const tempClr = T => { const t=Math.max(0,Math.min(1,(T-50)/950)); return `hsl(${Math.round(240-t*240)},80%,45%)`; };
+const pClr    = P => { const t=Math.max(0,Math.min(1,P/5)); return `hsl(${Math.round(120-t*120)},70%,40%)`; };
 
-function defaultChambers(n) {
-  return [
-    { gas:"CH₄", mol:0.6, V:5, T:300 },
-    { gas:"He",  mol:0.3, V:2, T:300 },
-    { gas:"H₂",  mol:0.4, V:3, T:300 },
-    { gas:"Ne",  mol:0.5, V:4, T:300 },
-  ].slice(0,n);
+function equilibrateD1(chambers, totalV) {
+  const weights = chambers.map(c => c.mol * c.T);
+  const tw = weights.reduce((s,w) => s+w, 0);
+  if(tw <= 0) return chambers;
+  return chambers.map((c,i) => ({...c, V: Math.max(0.05, (weights[i]/tw)*totalV)}));
 }
 
-// ═══════════════════════════════════════════
-// MINI UI COMPONENTS
-// ═══════════════════════════════════════════
-function Pill({ active, onClick, children, color }) {
-  return (
-    <button onClick={onClick} style={{
-      padding:"4px 10px", borderRadius:20, border:"none", cursor:"pointer",
-      fontSize:11, fontWeight:600, transition:"all .15s",
-      background: active?(color?color+"22":"#e2e8f0"):"transparent",
-      color: active?(color||"#1e293b"):"#94a3b8",
-      outline: active?`1.5px solid ${color||"#94a3b8"}`:"none",
-    }}>{children}</button>
-  );
+function calcPD1(chambers) {
+  const eq = equilibrateD1(chambers, chambers.reduce((s,c)=>s+c.V,0));
+  if(!eq[0] || eq[0].V <= 0) return 0;
+  return (eq[0].mol * R * eq[0].T) / eq[0].V;
 }
 
+// ── Slider ──────────────────────────────────────────────────
 function Slider({ label, value, min, max, step, unit, color, onChange }) {
-  const [inputVal, setInputVal] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-  useEffect(()=>{ if(!focused) setInputVal(String(value)); },[value,focused]);
+  const [local, setLocal] = useState(String(value));
+  const ref = useRef(false);
+  useEffect(() => { if (!ref.current) setLocal(String(value)); }, [value]);
+  const acc = color || "#6366f1";
   function commit(raw) {
-    const n=parseFloat(raw);
-    if(!isNaN(n)){ const c=Math.max(min,Math.min(max,n)); onChange(c); setInputVal(String(c)); }
-    else setInputVal(String(value));
+    const n = parseFloat(raw);
+    if (!isNaN(n)) { const c=Math.max(min,Math.min(max,n)); onChange(c); setLocal(String(c)); }
+    else setLocal(String(value));
   }
-  const acc=color||"#6366f1";
   return (
-    <div style={{marginBottom:8}}>
+    <div style={{marginBottom:10}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
         <span style={{fontSize:11,color:"#64748b"}}>{label}</span>
-        <div style={{display:"flex",alignItems:"center",gap:3}}>
-          <input type="number" min={min} max={max} step={step} value={inputVal}
-            onFocus={()=>setFocused(true)}
-            onChange={e=>setInputVal(e.target.value)}
-            onBlur={e=>{setFocused(false);commit(e.target.value);}}
-            onKeyDown={e=>{if(e.key==="Enter")e.target.blur();}}
-            style={{width:60,padding:"2px 5px",borderRadius:5,border:`1px solid ${focused?acc:"#e2e8f0"}`,
-              background:"#f8fafc",color:acc,fontSize:11,fontWeight:700,textAlign:"right",outline:"none"}}/>
-          <span style={{fontSize:10,color:"#94a3b8",minWidth:22}}>{unit}</span>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <input type="number" min={min} max={max} step={step} value={local}
+            onFocus={()=>{ref.current=true;}}
+            onChange={e=>setLocal(e.target.value)}
+            onBlur={e=>{ref.current=false;commit(e.target.value);}}
+            onKeyDown={e=>{if(e.key==="Enter"){ref.current=false;commit(local);e.target.blur();}}}
+            style={{width:65,padding:"3px 6px",borderRadius:6,border:`1px solid ${acc}`,background:"#f8fafc",color:acc,fontSize:11,fontWeight:700,textAlign:"right",outline:"none"}}/>
+          <span style={{fontSize:10,color:"#94a3b8",minWidth:24}}>{unit}</span>
         </div>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
-        onChange={e=>{const v=parseFloat(e.target.value);onChange(v);setInputVal(String(v));}}
+        onChange={e=>{const v=parseFloat(e.target.value);onChange(v);setLocal(String(v));}}
         style={{width:"100%",accentColor:acc}}/>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:1}}>
         <span style={{fontSize:9,color:"#cbd5e1"}}>{min}</span>
@@ -110,930 +99,618 @@ function Slider({ label, value, min, max, step, unit, color, onChange }) {
 function StatCard({ label, value, unit, color }) {
   return (
     <div style={{background:"#f8fafc",borderRadius:8,padding:"6px 10px",textAlign:"center",flex:1,border:"1px solid #e2e8f0"}}>
-      <div style={{fontSize:9,color:"#94a3b8",marginBottom:1}}>{label}</div>
+      <div style={{fontSize:9,color:"#94a3b8"}}>{label}</div>
       <div style={{fontSize:14,fontWeight:800,color:color||"#1e293b"}}>{value}</div>
       <div style={{fontSize:9,color:"#cbd5e1"}}>{unit}</div>
     </div>
   );
 }
 
-function SectionTitle({ children }) {
-  return <div style={{fontSize:12,fontWeight:700,color:"#475569",marginBottom:8,marginTop:2}}>{children}</div>;
-}
-
-// ═══════════════════════════════════════════
-// 3D VALVE SVG (turuncu, gerçekçi)
-// ═══════════════════════════════════════════
-function Valve3D({ cx, cy, open, onClick, label, size=1 }) {
-  const s = size;
-  const bodyColor  = open ? "#15803d" : "#dc2626";
-  const handleColor= open ? "#16a34a" : "#ef4444";
-  const pipeColor  = "#94a3b8";
+// ── Valve SVG ────────────────────────────────────────────────
+function ValveSVG({ x, y, open, onClick, label }) {
+  const bc = open ? "#15803d" : "#b91c1c";
+  const hc = open ? "#22c55e" : "#ef4444";
   return (
-    <g onClick={onClick} style={{cursor:"pointer"}} transform={`translate(${cx},${cy})`}>
-      {/* Pipe left */}
-      <rect x={-20*s} y={-5*s} width={12*s} height={10*s} rx={2*s} fill={pipeColor}/>
-      <rect x={-20*s} y={-3*s} width={12*s} height={2*s} fill="#cbd5e1"/>
-      {/* Pipe right */}
-      <rect x={8*s} y={-5*s} width={12*s} height={10*s} rx={2*s} fill={pipeColor}/>
-      <rect x={8*s} y={-3*s} width={12*s} height={2*s} fill="#cbd5e1"/>
-      {/* Valve body */}
-      <ellipse cx={0} cy={0} rx={10*s} ry={10*s} fill="#d97706"/>
-      <ellipse cx={0} cy={0} rx={8*s} ry={8*s} fill="#f59e0b"/>
-      <ellipse cx={-2*s} cy={-2*s} rx={3*s} ry={3*s} fill="#fde68a" opacity={0.6}/>
-      {/* Inner circle (open/close indicator) */}
-      <circle cx={0} cy={0} r={4*s} fill={bodyColor}/>
-      {/* Handle */}
+    <g onClick={onClick} style={{cursor:"pointer"}}>
+      <rect x={x-7} y={y-16} width={14} height={32} rx={3} fill="#94a3b8" stroke="#64748b" strokeWidth={1}/>
+      <ellipse cx={x} cy={y} rx={13} ry={13} fill="#d97706" stroke="#92400e" strokeWidth={1.5}/>
+      <ellipse cx={x} cy={y} rx={10} ry={10} fill="#f59e0b"/>
+      <ellipse cx={x-3} cy={y-3} rx={3} ry={2} fill="white" opacity={0.35}/>
+      <circle cx={x} cy={y} r={4} fill={bc}/>
       {open
-        ? <rect x={-8*s} y={-3*s} width={16*s} height={5*s} rx={2*s} fill={handleColor}/>
-        : <rect x={-2.5*s} y={-10*s} width={5*s} height={16*s} rx={2*s} fill={handleColor}/>
-      }
-      {/* Label */}
-      <text y={-16*s} textAnchor="middle" fill={bodyColor} fontSize={9*s} fontWeight={700}>{label}</text>
-      <text y={20*s} textAnchor="middle" fill={bodyColor} fontSize={7*s} fontWeight={600}>
-        {open?"AÇIK":"KAPALI"}
-      </text>
+        ? <rect x={x-10} y={y-3} width={20} height={6} rx={3} fill={hc}/>
+        : <rect x={x-3} y={y-10} width={6} height={20} rx={3} fill={hc}/>}
+      <text x={x} y={y-22} textAnchor="middle" fill={bc} fontSize={10} fontWeight="800">{label}</text>
+      <text x={x} y={y+28} textAnchor="middle" fill={bc} fontSize={8} fontWeight="700">{open?"Gaz Girişi":"Kapalı"}</text>
     </g>
   );
 }
 
-// ═══════════════════════════════════════════
-// 3D CYLINDER (cam efektli)
-// ═══════════════════════════════════════════
-function Cylinder3D({ x, y, w, h, fillColor, borderColor, label, children }) {
-  const rx = 14; // ellipse x radius for 3D effect
-  const ry = 8;
+// ── Piston SVG ───────────────────────────────────────────────
+function PistonSVG({ cx, y, h }) {
   return (
     <g>
       <defs>
-        <linearGradient id={`cyl-${label}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={borderColor} stopOpacity={0.3}/>
-          <stop offset="30%" stopColor={fillColor} stopOpacity={0.95}/>
-          <stop offset="70%" stopColor={fillColor} stopOpacity={0.9}/>
-          <stop offset="100%" stopColor={borderColor} stopOpacity={0.4}/>
-        </linearGradient>
-        <linearGradient id={`shine-${label}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="white" stopOpacity={0.5}/>
-          <stop offset="40%" stopColor="white" stopOpacity={0.05}/>
-          <stop offset="100%" stopColor="black" stopOpacity={0.1}/>
-        </linearGradient>
-      </defs>
-      {/* Main body */}
-      <rect x={x} y={y+ry} width={w} height={h-ry*2} fill={`url(#cyl-${label})`} stroke={borderColor} strokeWidth={1.5}/>
-      {/* Left cap */}
-      <ellipse cx={x} cy={y+h/2} rx={rx} ry={h/2} fill={fillColor} stroke={borderColor} strokeWidth={1.5} opacity={0.7}/>
-      <ellipse cx={x} cy={y+h/2} rx={rx*0.5} ry={h/2*0.5} fill="white" opacity={0.15}/>
-      {/* Right cap */}
-      <ellipse cx={x+w} cy={y+h/2} rx={rx} ry={h/2} fill={fillColor} stroke={borderColor} strokeWidth={1.5} opacity={0.8}/>
-      {/* Shine overlay */}
-      <rect x={x} y={y+ry} width={w} height={h-ry*2} fill={`url(#shine-${label})`}/>
-      {/* Top shine line */}
-      <line x1={x+rx} y1={y+ry+4} x2={x+w-rx} y2={y+ry+4} stroke="white" strokeWidth={1.5} opacity={0.4} strokeLinecap="round"/>
-      {children}
-    </g>
-  );
-}
-
-// ═══════════════════════════════════════════
-// 3D PISTON
-// ═══════════════════════════════════════════
-function Piston3D({ x, y, h, onMouseDown }) {
-  const pw = 16;
-  return (
-    <g style={{cursor:"ew-resize"}} onMouseDown={onMouseDown}>
-      <defs>
-        <linearGradient id="piston-grad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#475569"/>
+        <linearGradient id="pg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#334155"/>
           <stop offset="40%" stopColor="#94a3b8"/>
-          <stop offset="60%" stopColor="#cbd5e1"/>
-          <stop offset="100%" stopColor="#64748b"/>
+          <stop offset="65%" stopColor="#e2e8f0"/>
+          <stop offset="100%" stopColor="#475569"/>
         </linearGradient>
       </defs>
-      <rect x={x-pw/2} y={y} width={pw} height={h} fill="url(#piston-grad)" rx={3} stroke="#475569" strokeWidth={1.5}/>
-      {/* Rings */}
-      {[0.25,0.5,0.75].map((f,i)=>(
-        <rect key={i} x={x-pw/2} y={y+h*f-2} width={pw} height={4} fill="#94a3b8" opacity={0.6}/>
-      ))}
-      {/* Shine */}
-      <rect x={x-pw/2+2} y={y+4} width={3} height={h-8} fill="white" opacity={0.2} rx={1}/>
-      {/* Arrow hints */}
-      <text x={x} y={y-6} textAnchor="middle" fill="#94a3b8" fontSize={9}>↔</text>
+      <ellipse cx={cx} cy={y+h/2} rx={13} ry={h/2} fill="url(#pg)" stroke="#334155" strokeWidth={1.5}/>
+      <ellipse cx={cx-4} cy={y+h/2} rx={4} ry={h/2-10} fill="white" opacity={0.15}/>
+      <text x={cx} y={y-8} textAnchor="middle" fill="#94a3b8" fontSize={8}>İdeal</text>
+      <text x={cx} y={y-1} textAnchor="middle" fill="#94a3b8" fontSize={8}>Piston</text>
     </g>
   );
 }
 
-// ═══════════════════════════════════════════
-// TAB 1 — SIMULATION
-// ═══════════════════════════════════════════
-function SimTab({ chambers, setChambers, numChambers, setNumChambers,
-                  leftOpen, setLeftOpen, rightOpen, setRightOpen,
-                  leftP, setLeftP, rightP, setRightP }) {
+// ══════════════════════════════════════════════════════════════
+// DÜZENEK 1
+// ══════════════════════════════════════════════════════════════
+function Duzenek1() {
+  const [numChambers, setNumChambers] = useState(3);
+  const [totalV, setTotalV] = useState(10);
   const [selected, setSelected] = useState(0);
   const [animTick, setAnimTick] = useState(0);
-  const [dragPiston, setDragPiston] = useState(null);
-  const svgRef = useRef(null);
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
+  const [molAddL, setMolAddL] = useState(0.1);
+  const [molAddR, setMolAddR] = useState(0.1);
+  const [showPanel, setShowPanel] = useState("edit");
+  const [chambers, setChambers] = useState(() => makeDefault(3, 10));
 
-  useEffect(()=>{ const t=setInterval(()=>setAnimTick(x=>x+1),70); return()=>clearInterval(t); },[]);
-  useEffect(()=>{ setChambers(defaultChambers(numChambers)); setSelected(0); },[numChambers]);
+  function makeDefault(n, tv) {
+    const base = [{gas:"X",T:300},{gas:"Y",T:300},{gas:"Z",T:300},{gas:"W",T:300}].slice(0,n);
+    return equilibrateD1(base.map(c=>({...c,mol:0.4,V:tv/n})), tv);
+  }
 
-  function equilibrate() {
+  useEffect(()=>{setChambers(makeDefault(numChambers,totalV));setSelected(0);},[numChambers]);
+  useEffect(()=>{const t=setInterval(()=>setAnimTick(x=>x+1),70);return()=>clearInterval(t);},[]);
+
+  const eq = equilibrateD1(chambers, totalV);
+  const P = calcPD1(chambers);
+  const totalMol = chambers.reduce((s,c)=>s+c.mol,0);
+
+  function updateChamber(key, val) {
     setChambers(prev=>{
-      let chs=prev.map(c=>({...c}));
-      const totalV=chs.reduce((s,c)=>s+c.V,0);
-      for(let iter=0;iter<400;iter++){
-        const ps=chs.map(c=>idealP(c.mol,c.T,c.V));
-        for(let i=0;i<chs.length-1;i++){
-          const diff=ps[i]-ps[i+1]; const dV=diff*0.008;
-          chs[i]={...chs[i],V:Math.max(0.1,chs[i].V-dV)};
-          chs[i+1]={...chs[i+1],V:Math.max(0.1,chs[i+1].V+dV)};
-        }
-        if(leftOpen){ const diff=ps[0]-leftP; chs[0]={...chs[0],V:Math.max(0.1,chs[0].V-diff*0.008)}; }
-        if(rightOpen){ const n=chs.length-1; const diff=ps[n]-rightP; chs[n]={...chs[n],V:Math.max(0.1,chs[n].V-diff*0.008)}; }
-        if(!leftOpen&&!rightOpen){ const cur=chs.reduce((s,c)=>s+c.V,0); chs=chs.map(c=>({...c,V:c.V*totalV/cur})); }
-      }
-      return chs;
+      const newChs=prev.map((c,i)=>i===selected?{...c,[key]:Math.max(key==="mol"?0.01:50,val)}:c);
+      return equilibrateD1(newChs,totalV);
+    });
+  }
+  function updateTotalV(v) {
+    const tv=Math.max(2,Math.min(30,v)); setTotalV(tv);
+    setChambers(prev=>equilibrateD1(prev,tv));
+  }
+  function addMol(side, delta) {
+    const n=side==="left"?0:chambers.length-1;
+    setChambers(prev=>{
+      const newChs=prev.map((c,i)=>i===n?{...c,mol:Math.max(0.01,c.mol+delta)}:c);
+      return equilibrateD1(newChs,totalV);
     });
   }
 
-  // SVG layout
-  const SVG_W=900, SVG_H=320;
-  const CY=50, CH=160;
-  const WALL_W=80, ATMO_W=80;
-  const containerW=SVG_W-WALL_W-ATMO_W;
-  const totalV=chambers.reduce((s,c)=>s+c.V,0);
-  const widths=chambers.map(c=>(c.V/totalV)*containerW);
-  let xc=WALL_W;
-  const rects=widths.map(w=>{ const x=xc; xc+=w; return{x,w,cx:x+w/2}; });
-  const pistonXs=[]; let acc=WALL_W;
-  for(let i=0;i<chambers.length-1;i++){ acc+=widths[i]; pistonXs.push(acc); }
-  const rightEdge=WALL_W+containerW;
-  const VALVE_Y=CY+CH+40;
-
-  function onMouseMove(e){
-    if(dragPiston===null)return;
-    const r=svgRef.current.getBoundingClientRect();
-    const mx=(e.clientX-r.left)*(SVG_W/r.width);
-    setChambers(prev=>{
-      const chs=[...prev]; const i=dragPiston;
-      const lb=rects[i].x+20; const rb=rects[i].x+widths[i]+(rects[i+1]?widths[i+1]:0)-20;
-      const cx=Math.max(lb,Math.min(rb,mx));
-      const delta=cx-(rects[i].x+widths[i]);
-      chs[i]={...chs[i],V:Math.max(0.1,chs[i].V+delta/containerW*totalV)};
-      chs[i+1]={...chs[i+1],V:Math.max(0.1,chs[i+1].V-delta/containerW*totalV)};
-      return chs;
-    });
-  }
+  const ch = eq[selected]||eq[0];
+  const cc = CHAMBER_COLORS[selected%4];
+  const SW=960,SH=340,CY=55,CH=210,WALL=90,ATMO=90,ER=28;
+  const containerW=SW-WALL-ATMO;
+  const weights=eq.map(c=>c.mol*c.T);
+  const tw=weights.reduce((s,w)=>s+w,0);
+  const widths=eq.map((_,i)=>tw>0?(weights[i]/tw)*containerW:containerW/eq.length);
+  let xc=WALL;
+  const rects=widths.map(w=>{const x=xc;xc+=w;return{x,w,cx:x+w/2};});
+  const pistonXs=[];let acc=WALL;
+  for(let i=0;i<eq.length-1;i++){acc+=widths[i];pistonXs.push(acc);}
+  const rightEdge=WALL+containerW;
 
   function getParticles(rect,T,color,idx){
-    const count=Math.max(4,Math.min(20,Math.round(chambers[idx].mol*12)));
+    const count=Math.max(5,Math.min(22,Math.round(eq[idx].mol*14)));
     return Array.from({length:count},(_,i)=>{
-      const speed=0.2+(T/300)*0.4;
-      const seed=i*173.1+idx*700+animTick*speed;
-      const px=rect.x+20+((Math.sin(seed*0.61+i)*0.5+0.5)*(rect.w-40));
-      const py=CY+16+((Math.cos(seed*0.43+i*1.3)*0.5+0.5)*(CH-32));
-      return <circle key={i} cx={px} cy={py} r={4} fill={color} opacity={0.75}/>;
+      const sp=0.15+(T/300)*0.38;
+      const seed=i*173.1+idx*700+animTick*sp;
+      const px=rect.x+22+((Math.sin(seed*0.61+i)*0.5+0.5)*(rect.w-44));
+      const py=CY+18+((Math.cos(seed*0.43+i*1.3)*0.5+0.5)*(CH-36));
+      return <circle key={i} cx={px} cy={py} r={5} fill={color} opacity={0.65}/>;
     });
   }
-
-  const ch=chambers[selected]||chambers[0];
-  const P=idealP(ch.mol,ch.T,ch.V);
-  const cf=CHAMBER_FILLS[selected%CHAMBER_FILLS.length];
 
   return (
     <div>
-      {/* Top controls — compact */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10,alignItems:"center",
-        background:"#f8fafc",borderRadius:10,padding:"8px 12px",border:"1px solid #e2e8f0"}}>
+      <div style={{background:"white",borderRadius:12,padding:"10px 14px",marginBottom:8,border:"1px solid #e2e8f0"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e293b",marginBottom:2}}>🧪 Düzenek 1 — Yatay Silindir</div>
+        <div style={{fontSize:11,color:"#94a3b8"}}>Toplam hacim sabittir · Tüm bölmelerde basınç eşittir · Pistonlar otomatik denge kurar</div>
+      </div>
+      <div style={{background:"white",borderRadius:10,padding:"8px 12px",marginBottom:8,border:"1px solid #e2e8f0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
-          <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>BÖLME:</span>
-          {[2,3,4].map(n=><Pill key={n} active={numChambers===n} onClick={()=>setNumChambers(n)}>{n}</Pill>)}
+          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>BÖLME</span>
+          {[2,3,4].map(n=>(
+            <button key={n} onClick={()=>setNumChambers(n)} style={{width:26,height:26,borderRadius:13,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:numChambers===n?"#6366f1":"#f1f5f9",color:numChambers===n?"white":"#94a3b8"}}>{n}</button>
+          ))}
         </div>
-        <div style={{width:1,height:20,background:"#e2e8f0"}}/>
-        {/* M1 */}
+        <div style={{width:1,height:22,background:"#e2e8f0"}}/>
+        <div style={{display:"flex",gap:4,alignItems:"center",minWidth:200}}>
+          <span style={{fontSize:10,color:"#94a3b8"}}>Toplam V</span>
+          <Slider label="" value={totalV} min={2} max={30} step={0.5} unit="L" color="#0ea5e9" onChange={updateTotalV}/>
+        </div>
+        <div style={{background:"#f8fafc",borderRadius:8,padding:"4px 10px",border:"1px solid #e2e8f0"}}>
+          <span style={{fontSize:9,color:"#94a3b8"}}>P = </span>
+          <span style={{fontSize:13,fontWeight:800,color:"#6366f1"}}>{P.toFixed(3)} atm</span>
+        </div>
+        <div style={{width:1,height:22,background:"#e2e8f0"}}/>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
-          <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>M₁:</span>
-          <button onClick={()=>setLeftOpen(o=>!o)} style={{
-            padding:"3px 8px",borderRadius:12,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,
-            background:leftOpen?"#dcfce7":"#fee2e2",color:leftOpen?"#16a34a":"#dc2626"
-          }}>{leftOpen?"AÇIK":"KAPALI"}</button>
-          {leftOpen&&<input type="range" min={0.1} max={5} step={0.1} value={leftP}
-            onChange={e=>setLeftP(parseFloat(e.target.value))}
-            style={{width:60,accentColor:"#16a34a"}}/>}
-          {leftOpen&&<span style={{fontSize:10,color:"#16a34a",fontWeight:700,minWidth:40}}>{leftP.toFixed(1)}atm</span>}
+          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>M₁</span>
+          <button onClick={()=>setLeftOpen(o=>!o)} style={{padding:"3px 8px",borderRadius:7,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,background:leftOpen?"#dcfce7":"#f1f5f9",color:leftOpen?"#15803d":"#94a3b8",outline:leftOpen?"1.5px solid #22c55e":"none"}}>{leftOpen?"Açık":"Kapalı"}</button>
+          {leftOpen&&<><button onClick={()=>addMol("left",-molAddL)} style={{width:22,height:22,borderRadius:5,border:"none",cursor:"pointer",background:"#fee2e2",color:"#dc2626",fontWeight:700,fontSize:13}}>−</button>
+          <Slider label="" value={molAddL} min={0.05} max={1} step={0.05} unit="mol" color="#22c55e" onChange={setMolAddL}/>
+          <button onClick={()=>addMol("left",molAddL)} style={{width:22,height:22,borderRadius:5,border:"none",cursor:"pointer",background:"#dcfce7",color:"#16a34a",fontWeight:700,fontSize:13}}>+</button></>}
         </div>
-        <div style={{width:1,height:20,background:"#e2e8f0"}}/>
-        {/* M2 */}
+        <div style={{width:1,height:22,background:"#e2e8f0"}}/>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
-          <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>M₂:</span>
-          <button onClick={()=>setRightOpen(o=>!o)} style={{
-            padding:"3px 8px",borderRadius:12,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,
-            background:rightOpen?"#dcfce7":"#fee2e2",color:rightOpen?"#16a34a":"#dc2626"
-          }}>{rightOpen?"AÇIK":"KAPALI"}</button>
-          {rightOpen&&<input type="range" min={0.1} max={5} step={0.1} value={rightP}
-            onChange={e=>setRightP(parseFloat(e.target.value))}
-            style={{width:60,accentColor:"#16a34a"}}/>}
-          {rightOpen&&<span style={{fontSize:10,color:"#16a34a",fontWeight:700,minWidth:40}}>{rightP.toFixed(1)}atm</span>}
-        </div>
-        <div style={{marginLeft:"auto"}}>
-          <button onClick={equilibrate} style={{
-            padding:"5px 12px",borderRadius:8,border:"1px solid #16a34a",
-            background:"#f0fdf4",color:"#16a34a",fontWeight:700,fontSize:11,cursor:"pointer"
-          }}>⚖️ Denge</button>
+          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>M₂</span>
+          <button onClick={()=>setRightOpen(o=>!o)} style={{padding:"3px 8px",borderRadius:7,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,background:rightOpen?"#dcfce7":"#f1f5f9",color:rightOpen?"#15803d":"#94a3b8",outline:rightOpen?"1.5px solid #22c55e":"none"}}>{rightOpen?"Açık":"Kapalı"}</button>
+          {rightOpen&&<><button onClick={()=>addMol("right",-molAddR)} style={{width:22,height:22,borderRadius:5,border:"none",cursor:"pointer",background:"#fee2e2",color:"#dc2626",fontWeight:700,fontSize:13}}>−</button>
+          <Slider label="" value={molAddR} min={0.05} max={1} step={0.05} unit="mol" color="#22c55e" onChange={setMolAddR}/>
+          <button onClick={()=>addMol("right",molAddR)} style={{width:22,height:22,borderRadius:5,border:"none",cursor:"pointer",background:"#dcfce7",color:"#16a34a",fontWeight:700,fontSize:13}}>+</button></>}
         </div>
       </div>
 
-      {/* MAIN SVG — big and prominent */}
-      <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} width="100%"
-        style={{display:"block",borderRadius:16,background:"#f0f4f8",
-          border:"1px solid #e2e8f0",cursor:dragPiston!==null?"ew-resize":"default",
-          boxShadow:"0 4px 20px rgba(0,0,0,0.06)"}}
-        onMouseMove={onMouseMove} onMouseUp={()=>setDragPiston(null)} onMouseLeave={()=>setDragPiston(null)}>
-
+      <svg viewBox={`0 0 ${SW} ${SH}`} width="100%" style={{display:"block",borderRadius:16,background:"white",border:"1px solid #e2e8f0",boxShadow:"0 4px 20px rgba(0,0,0,0.08)",marginBottom:8}}>
         <defs>
-          {/* Left wall gradient */}
-          <linearGradient id="wall-l" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={leftOpen?"#dcfce7":"#f1f5f9"}/>
-            <stop offset="100%" stopColor={leftOpen?"#bbf7d0":"#e2e8f0"}/>
+          <linearGradient id="ts1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="white" stopOpacity={0.6}/><stop offset="25%" stopColor="white" stopOpacity={0.08}/><stop offset="100%" stopColor="black" stopOpacity={0.06}/>
           </linearGradient>
-          <linearGradient id="wall-r" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={rightOpen?"#bbf7d0":"#e2e8f0"}/>
-            <stop offset="100%" stopColor={rightOpen?"#dcfce7":"#f1f5f9"}/>
-          </linearGradient>
-          <marker id="arrow-r" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3z" fill="#16a34a"/>
-          </marker>
-          <marker id="arrow-l" markerWidth="6" markerHeight="6" refX="1" refY="3" orient="auto">
-            <path d="M6,0 L6,6 L0,3z" fill="#16a34a"/>
-          </marker>
+          <marker id="a1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L0,7 L7,3.5z" fill="#22c55e"/></marker>
+          <marker id="a1l" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto"><path d="M7,0 L7,7 L0,3.5z" fill="#22c55e"/></marker>
         </defs>
-
-        {/* Left atmosphere wall */}
-        <rect x={0} y={CY} width={WALL_W} height={CH} fill="url(#wall-l)"
-          stroke={leftOpen?"#86efac":"#cbd5e1"} strokeWidth={2} rx={8}/>
-        <text x={WALL_W/2} y={CY+CH/2-10} textAnchor="middle"
-          fill={leftOpen?"#15803d":"#94a3b8"} fontSize={13} fontWeight={800}>M₁</text>
-        <text x={WALL_W/2} y={CY+CH/2+8} textAnchor="middle"
-          fill={leftOpen?"#16a34a":"#94a3b8"} fontSize={10}>
-          {leftOpen?`${leftP.toFixed(1)} atm`:"KAPALI"}
-        </text>
-        {leftOpen&&<>
-          <line x1={8} y1={CY+CH/2} x2={WALL_W-4} y2={CY+CH/2} stroke="#16a34a" strokeWidth={2} markerEnd="url(#arrow-r)"/>
-          <line x1={8} y1={CY+CH/2-22} x2={WALL_W-4} y2={CY+CH/2-22} stroke="#16a34a" strokeWidth={1} markerEnd="url(#arrow-r)" opacity={0.4}/>
-          <line x1={8} y1={CY+CH/2+22} x2={WALL_W-4} y2={CY+CH/2+22} stroke="#16a34a" strokeWidth={1} markerEnd="url(#arrow-r)" opacity={0.4}/>
-        </>}
-
-        {/* Chambers as 3D cylinders */}
-        {chambers.map((c,idx)=>{
-          const r=rects[idx];
-          const gObj=gasObj(c.gas);
-          const fill=CHAMBER_FILLS[idx%CHAMBER_FILLS.length];
-          const cP=idealP(c.mol,c.T,c.V);
-          const isSel=selected===idx;
+        <rect x={WALL-ER+4} y={CY+6} width={containerW+ER*2-8} height={CH-6} rx={6} fill="rgba(0,0,0,0.06)"/>
+        <ellipse cx={WALL} cy={CY+CH/2} rx={ER} ry={CH/2} fill="#cbd5e1" stroke="#94a3b8" strokeWidth={1.5}/>
+        {eq.map((c,idx)=>{
+          const r=rects[idx];const col=CHAMBER_COLORS[idx%4];const isSel=selected===idx;
           return(
             <g key={idx} onClick={()=>setSelected(idx)} style={{cursor:"pointer"}}>
-              {/* 3D Cylinder body */}
-              <Cylinder3D x={r.x} y={CY} w={r.w} h={CH} fillColor={fill.bg} borderColor={isSel?fill.border:"#cbd5e1"} label={`c${idx}`}>
-                {/* Particles */}
-                {getParticles(r,c.T,fill.particle,idx)}
-              </Cylinder3D>
-              {/* Selection ring */}
-              {isSel&&<rect x={r.x-2} y={CY-2} width={r.w+4} height={CH+4} fill="none"
-                stroke={fill.border} strokeWidth={2.5} strokeDasharray="6,3" rx={4}/>}
-              {/* Gas label */}
-              <text x={r.cx} y={CY+22} textAnchor="middle" fill={fill.border} fontSize={15} fontWeight={800}>{c.gas}</text>
-              {/* Stats */}
-              <text x={r.cx} y={CY+40} textAnchor="middle" fill="#64748b" fontSize={10}>{c.mol.toFixed(2)} mol</text>
-              <text x={r.cx} y={CY+55} textAnchor="middle" fill="#64748b" fontSize={10}>{c.V.toFixed(1)} L</text>
-              <text x={r.cx} y={CY+72} textAnchor="middle" fill={pClr(cP)} fontSize={13} fontWeight={800}>{cP.toFixed(3)} atm</text>
-              <text x={r.cx} y={CY+88} textAnchor="middle" fill={tempClr(c.T)} fontSize={10}>{c.T} K</text>
-              {/* Temp color bar at bottom of cylinder */}
-              <rect x={r.x+6} y={CY+CH-10} width={r.w-12} height={5} rx={2.5} fill={tempClr(c.T)} opacity={0.7}/>
-              {/* Volume label */}
-              <text x={r.cx} y={CY+CH+16} textAnchor="middle" fill="#94a3b8" fontSize={9}>V={c.V.toFixed(1)}L</text>
+              <rect x={r.x} y={CY} width={r.w} height={CH} fill={col.fill}/>
+              {isSel&&<rect x={r.x} y={CY} width={r.w} height={CH} fill={col.stroke} opacity={0.1}/>}
+              {getParticles(r,c.T,col.particle,idx)}
+              <text x={r.cx} y={CY+30} textAnchor="middle" fill={col.particle} fontSize={20} fontWeight="900">{c.gas}</text>
+              <text x={r.cx} y={CY+52} textAnchor="middle" fill="#475569" fontSize={12}>{c.mol.toFixed(2)} mol</text>
+              <text x={r.cx} y={CY+70} textAnchor="middle" fill="#0ea5e9" fontSize={12}>{c.V.toFixed(2)} L</text>
+              <text x={r.cx} y={CY+92} textAnchor="middle" fill="#6366f1" fontSize={16} fontWeight="800">{P.toFixed(3)} atm</text>
+              <text x={r.cx} y={CY+110} textAnchor="middle" fill={tempClr(c.T)} fontSize={11}>{c.T} K</text>
+              <rect x={r.x+6} y={CY+CH-12} width={r.w-12} height={7} rx={3.5} fill={tempClr(c.T)} opacity={0.55}/>
+              {isSel&&<rect x={r.x} y={CY} width={r.w} height={CH} fill="none" stroke={col.stroke} strokeWidth={3} strokeDasharray="10,5"/>}
+              <text x={r.cx} y={CY+CH+22} textAnchor="middle" fill="#94a3b8" fontSize={10}>V = {c.V.toFixed(2)} L</text>
             </g>
           );
         })}
-
-        {/* 3D Pistons */}
-        {pistonXs.map((px,i)=>(
-          <Piston3D key={i} x={px} y={CY} h={CH} onMouseDown={e=>{e.stopPropagation();setDragPiston(i);}}/>
-        ))}
-
-        {/* Right atmosphere wall */}
-        <rect x={rightEdge} y={CY} width={ATMO_W} height={CH} fill="url(#wall-r)"
-          stroke={rightOpen?"#86efac":"#cbd5e1"} strokeWidth={2} rx={8}/>
-        <text x={rightEdge+ATMO_W/2} y={CY+CH/2-10} textAnchor="middle"
-          fill={rightOpen?"#15803d":"#94a3b8"} fontSize={13} fontWeight={800}>M₂</text>
-        <text x={rightEdge+ATMO_W/2} y={CY+CH/2+8} textAnchor="middle"
-          fill={rightOpen?"#16a34a":"#94a3b8"} fontSize={10}>
-          {rightOpen?`${rightP.toFixed(1)} atm`:"KAPALI"}
-        </text>
-        {rightOpen&&<>
-          <line x1={rightEdge+4} y1={CY+CH/2} x2={rightEdge+ATMO_W-8} y2={CY+CH/2} stroke="#16a34a" strokeWidth={2} markerEnd="url(#arrow-l)"/>
-          <line x1={rightEdge+4} y1={CY+CH/2-22} x2={rightEdge+ATMO_W-8} y2={CY+CH/2-22} stroke="#16a34a" strokeWidth={1} markerEnd="url(#arrow-l)" opacity={0.4}/>
-          <line x1={rightEdge+4} y1={CY+CH/2+22} x2={rightEdge+ATMO_W-8} y2={CY+CH/2+22} stroke="#16a34a" strokeWidth={1} markerEnd="url(#arrow-l)" opacity={0.4}/>
-        </>}
-
-        {/* Valves below */}
-        <Valve3D cx={WALL_W/2} cy={VALVE_Y} open={leftOpen} onClick={()=>setLeftOpen(o=>!o)} label="M₁"/>
-        {pistonXs.map((px,i)=>(
-          <Valve3D key={i} cx={px} cy={VALVE_Y} open={true} onClick={()=>{}} label={`P${i+1}`} size={0.85}/>
-        ))}
-        <Valve3D cx={rightEdge+ATMO_W/2} cy={VALVE_Y} open={rightOpen} onClick={()=>setRightOpen(o=>!o)} label="M₂"/>
-
-        {/* Legend */}
-        <text x={SVG_W/2} y={SVG_H-6} textAnchor="middle" fill="#cbd5e1" fontSize={9}>
-          🟢 Yeşil = AÇIK · 🔴 Kırmızı = KAPALI · Pistonu sürükle → hacim değiştir
-        </text>
+        <line x1={WALL} y1={CY} x2={rightEdge} y2={CY} stroke="#94a3b8" strokeWidth={2.5}/>
+        <line x1={WALL} y1={CY+CH} x2={rightEdge} y2={CY+CH} stroke="#94a3b8" strokeWidth={2.5}/>
+        <rect x={WALL} y={CY} width={containerW} height={CH} fill="url(#ts1)"/>
+        <ellipse cx={rightEdge} cy={CY+CH/2} rx={ER} ry={CH/2} fill="#d1d5db" stroke="#9ca3af" strokeWidth={1.5}/>
+        <ellipse cx={WALL} cy={CY+CH/2} rx={ER} ry={CH/2} fill={leftOpen?"#bbf7d0":"#e5e7eb"} stroke={leftOpen?"#86efac":"#9ca3af"} strokeWidth={2}/>
+        <text x={WALL/2} y={CY+CH/2-14} textAnchor="middle" fill={leftOpen?"#15803d":"#94a3b8"} fontSize={13} fontWeight="900">M₁</text>
+        <text x={WALL/2} y={CY+CH/2+4} textAnchor="middle" fill={leftOpen?"#22c55e":"#94a3b8"} fontSize={9}>{leftOpen?"Gaz Girişi":"Kapalı"}</text>
+        {leftOpen&&<><line x1={4} y1={CY+CH/2} x2={WALL-ER-2} y2={CY+CH/2} stroke="#22c55e" strokeWidth={2.5} markerEnd="url(#a1)"/><line x1={4} y1={CY+CH/2-26} x2={WALL-ER-2} y2={CY+CH/2-26} stroke="#22c55e" strokeWidth={1} markerEnd="url(#a1)" opacity={0.4}/><line x1={4} y1={CY+CH/2+26} x2={WALL-ER-2} y2={CY+CH/2+26} stroke="#22c55e" strokeWidth={1} markerEnd="url(#a1)" opacity={0.4}/></>}
+        <ellipse cx={rightEdge} cy={CY+CH/2} rx={ER} ry={CH/2} fill={rightOpen?"#bbf7d0":"#e5e7eb"} stroke={rightOpen?"#86efac":"#9ca3af"} strokeWidth={2}/>
+        <text x={rightEdge+ATMO/2} y={CY+CH/2-14} textAnchor="middle" fill={rightOpen?"#15803d":"#94a3b8"} fontSize={13} fontWeight="900">M₂</text>
+        <text x={rightEdge+ATMO/2} y={CY+CH/2+4} textAnchor="middle" fill={rightOpen?"#22c55e":"#94a3b8"} fontSize={9}>{rightOpen?"Gaz Girişi":"Kapalı"}</text>
+        {rightOpen&&<><line x1={rightEdge+ER+2} y1={CY+CH/2} x2={SW-4} y2={CY+CH/2} stroke="#22c55e" strokeWidth={2.5} markerEnd="url(#a1l)"/><line x1={rightEdge+ER+2} y1={CY+CH/2-26} x2={SW-4} y2={CY+CH/2-26} stroke="#22c55e" strokeWidth={1} markerEnd="url(#a1l)" opacity={0.4}/><line x1={rightEdge+ER+2} y1={CY+CH/2+26} x2={SW-4} y2={CY+CH/2+26} stroke="#22c55e" strokeWidth={1} markerEnd="url(#a1l)" opacity={0.4}/></>}
+        {pistonXs.map((px,i)=><PistonSVG key={i} cx={px} y={CY} h={CH}/>)}
+        <ValveSVG x={WALL-ER} y={CY+CH/2} open={leftOpen} onClick={()=>setLeftOpen(o=>!o)} label="M₁"/>
+        <ValveSVG x={rightEdge+ER} y={CY+CH/2} open={rightOpen} onClick={()=>setRightOpen(o=>!o)} label="M₂"/>
+        <text x={SW/2} y={SH-6} textAnchor="middle" fill="#94a3b8" fontSize={9}>P₁=P₂=…={P.toFixed(3)} atm · Toplam V={totalV.toFixed(1)} L (sabit) · Bölmeye tıkla → seç</text>
       </svg>
 
-      {/* Bottom panels — compact */}
-      <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap"}}>
-        {/* Chamber editor */}
-        <div style={{flex:"1 1 220px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <SectionTitle>Bölme {selected+1} — {ch.gas}</SectionTitle>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
-            {GAS_PRESETS.map(g=>(
-              <Pill key={g.label} active={ch.gas===g.label} color={g.color}
-                onClick={()=>setChambers(prev=>prev.map((c,i)=>i===selected?{...c,gas:g.label}:c))}>
-                {g.label}
-              </Pill>
-            ))}
+      <div style={{display:"flex",gap:4,marginBottom:6}}>
+        {[["edit","✏️ Düzenle"],["pvnrt","🔬 PV=nRT"],["table","📋 Tablo"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setShowPanel(id)} style={{padding:"5px 12px",borderRadius:7,border:"none",cursor:"pointer",fontSize:10,fontWeight:600,background:showPanel===id?"#e0e7ff":"#f1f5f9",color:showPanel===id?"#4338ca":"#94a3b8"}}>{lbl}</button>
+        ))}
+      </div>
+      {showPanel==="edit"&&(
+        <div style={{background:"white",borderRadius:10,padding:14,border:`1.5px solid ${cc.stroke}`}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#475569"}}>Bölme {selected+1} — Gaz:</span>
+            <input value={ch.gas} onChange={e=>setChambers(prev=>prev.map((c,i)=>i===selected?{...c,gas:e.target.value}:c))} style={{width:60,padding:"3px 7px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,fontWeight:700,color:cc.particle,background:"#f8fafc",outline:"none"}}/>
           </div>
-          <Slider label="n (mol)" value={ch.mol} min={0.05} max={3} step={0.05} unit="mol" color="#6366f1"
-            onChange={v=>setChambers(prev=>prev.map((c,i)=>i===selected?{...c,mol:v}:c))}/>
-          <Slider label="V (L)" value={ch.V} min={0.5} max={14} step={0.1} unit="L" color="#0ea5e9"
-            onChange={v=>setChambers(prev=>prev.map((c,i)=>i===selected?{...c,V:v}:c))}/>
-          <Slider label="T (K)" value={ch.T} min={50} max={1000} step={5} unit="K" color={tempClr(ch.T)}
-            onChange={v=>setChambers(prev=>prev.map((c,i)=>i===selected?{...c,T:v}:c))}/>
-        </div>
-
-        {/* PV=nRT */}
-        <div style={{flex:"1 1 200px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <SectionTitle>PV = nRT</SectionTitle>
-          <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-            <StatCard label="P (atm)" value={P.toFixed(3)} unit="atm" color={pClr(P)}/>
-            <StatCard label="V (L)" value={ch.V.toFixed(2)} unit="L" color="#0ea5e9"/>
-            <StatCard label="T (K)" value={ch.T} unit="K" color={tempClr(ch.T)}/>
-          </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            <StatCard label="PV" value={(P*ch.V).toFixed(3)} unit="atm·L" color="#1e293b"/>
-            <StatCard label="nRT" value={(ch.mol*R*ch.T).toFixed(3)} unit="atm·L" color="#16a34a"/>
-          </div>
-          <div style={{marginTop:8,fontSize:10,color:"#94a3b8",lineHeight:1.7}}>
-            🌡️ T↑ → P↑ &nbsp; 📦 V↓ → P↑ &nbsp; 🧪 n↑ → P↑
+          <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:160}}><Slider label="n (mol)" value={ch.mol} min={0.05} max={5} step={0.05} unit="mol" color="#6366f1" onChange={v=>updateChamber("mol",v)}/></div>
+            <div style={{flex:1,minWidth:160}}><Slider label="T (K)" value={ch.T} min={50} max={1000} step={5} unit="K" color={tempClr(ch.T)} onChange={v=>updateChamber("T",v)}/></div>
           </div>
         </div>
-
-        {/* Summary table */}
-        <div style={{flex:"2 1 300px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",overflowX:"auto"}}>
-          <SectionTitle>Özet Tablosu</SectionTitle>
+      )}
+      {showPanel==="pvnrt"&&(
+        <div style={{background:"white",borderRadius:10,padding:14,border:"1px solid #e2e8f0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#475569",marginBottom:8}}>PV=nRT · P={P.toFixed(4)} atm</div>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-            <thead>
-              <tr style={{borderBottom:"1px solid #f1f5f9"}}>
-                {["#","Gaz","n","V","T","P (atm)","PV","✓"].map(h=>(
-                  <th key={h} style={{padding:"3px 6px",color:"#94a3b8",textAlign:"left",fontWeight:600}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {chambers.map((c,i)=>{
-                const cP=idealP(c.mol,c.T,c.V);
-                const gO=gasObj(c.gas);
-                const nP=chambers[i+1]?idealP(chambers[i+1].mol,chambers[i+1].T,chambers[i+1].V):(rightOpen?rightP:cP);
-                const ok=Math.abs(cP-nP)<0.08;
-                const fill=CHAMBER_FILLS[i%CHAMBER_FILLS.length];
-                return(
-                  <tr key={i} onClick={()=>setSelected(i)} style={{cursor:"pointer",background:i===selected?fill.bg+"88":"transparent"}}>
-                    <td style={{padding:"3px 6px",color:"#94a3b8"}}>{i+1}</td>
-                    <td style={{padding:"3px 6px",color:gO.color,fontWeight:700}}>{c.gas}</td>
-                    <td style={{padding:"3px 6px"}}>{c.mol.toFixed(2)}</td>
-                    <td style={{padding:"3px 6px",color:"#0ea5e9"}}>{c.V.toFixed(2)}</td>
-                    <td style={{padding:"3px 6px",color:tempClr(c.T)}}>{c.T}</td>
-                    <td style={{padding:"3px 6px",color:pClr(cP),fontWeight:700}}>{cP.toFixed(3)}</td>
-                    <td style={{padding:"3px 6px",color:"#64748b"}}>{(cP*c.V).toFixed(2)}</td>
-                    <td style={{padding:"3px 6px"}}>
-                      <span style={{background:ok?"#dcfce7":"#fee2e2",color:ok?"#16a34a":"#dc2626",
-                        borderRadius:4,padding:"1px 5px",fontSize:9,fontWeight:700}}>
-                        {ok?"✓":"✗"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+            <thead><tr>{["#","Gaz","n","V(L)","T(K)","P","nRT","✓"].map(h=><th key={h} style={{padding:"3px 7px",color:"#94a3b8",textAlign:"left",fontWeight:600,borderBottom:"1px solid #f1f5f9"}}>{h}</th>)}</tr></thead>
+            <tbody>{eq.map((c,i)=>{const cP=(c.mol*R*c.T)/c.V;const ok=Math.abs(cP-P)<0.01;return(<tr key={i} onClick={()=>setSelected(i)} style={{cursor:"pointer",background:i===selected?"#eff6ff":"transparent"}}><td style={{padding:"3px 7px",color:"#94a3b8"}}>{i+1}</td><td style={{padding:"3px 7px",color:CHAMBER_COLORS[i%4].particle,fontWeight:700}}>{c.gas}</td><td style={{padding:"3px 7px"}}>{c.mol.toFixed(3)}</td><td style={{padding:"3px 7px",color:"#0ea5e9"}}>{c.V.toFixed(3)}</td><td style={{padding:"3px 7px",color:tempClr(c.T)}}>{c.T}</td><td style={{padding:"3px 7px",color:"#6366f1",fontWeight:700}}>{cP.toFixed(4)}</td><td style={{padding:"3px 7px"}}>{(c.mol*R*c.T).toFixed(3)}</td><td style={{padding:"3px 7px"}}><span style={{background:ok?"#dcfce7":"#fee2e2",color:ok?"#16a34a":"#dc2626",borderRadius:4,padding:"1px 5px",fontSize:9,fontWeight:700}}>{ok?"✓":"✗"}</span></td></tr>);})}</tbody>
           </table>
         </div>
-      </div>
+      )}
+      {showPanel==="table"&&(
+        <div style={{background:"white",borderRadius:10,padding:14,border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {eq.map((c,i)=>{const col=CHAMBER_COLORS[i%4];return(<div key={i} onClick={()=>setSelected(i)} style={{flex:"1 1 130px",background:i===selected?col.fill+"aa":col.fill+"55",borderRadius:10,padding:10,border:`1.5px solid ${i===selected?col.stroke:"transparent"}`,cursor:"pointer"}}><div style={{fontSize:13,fontWeight:800,color:col.particle,marginBottom:4}}>{c.gas} — {i+1}</div><div style={{fontSize:11,color:"#64748b"}}>n = {c.mol.toFixed(3)} mol</div><div style={{fontSize:11,color:"#0ea5e9"}}>V = {c.V.toFixed(3)} L</div><div style={{fontSize:11,color:tempClr(c.T)}}>T = {c.T} K</div><div style={{fontSize:13,fontWeight:700,color:"#6366f1",marginTop:4}}>P = {P.toFixed(3)} atm</div></div>);})}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════
-// TAB 2 — GRAPHS
-// ═══════════════════════════════════════════
-function GraphsTab({ chambers }) {
-  const [history,setHistory]=useState([]);
-  const [recording,setRecording]=useState(false);
-  const [chart,setChart]=useState("PT");
-  const tickRef=useRef(0);
-  const COLORS=["#f87171","#fb923c","#4ade80","#60a5fa"];
+// ══════════════════════════════════════════════════════════════
+// DÜZENEK 2 (4 kap, pistonlu, M1-M4)
+// ══════════════════════════════════════════════════════════════
+function doEqD2(caps, valves, P0) {
+  const par=[0,1,2,3];
+  const find=(x)=>par[x]===x?x:(par[x]=find(par[x]));
+  const union=(a,b)=>{par[find(a)]=find(b);};
+  if(valves.m1)union(0,2);if(valves.m2)union(1,2);if(valves.m3)union(0,1);if(valves.m4)union(2,3);
+  const groups={};
+  for(let i=0;i<4;i++){const root=find(i);if(!groups[root])groups[root]={totalMol:0,sumVT:0,idx:[],hasPiston:false};groups[root].totalMol+=caps[i].mol;if(i<3)groups[root].sumVT+=caps[i].V/caps[i].T;if(i===3)groups[root].hasPiston=true;groups[root].idx.push(i);}
+  const next=caps.map(c=>({...c}));
+  for(const g of Object.values(groups)){
+    if(g.idx.length<2)continue;
+    const gasNames=g.idx.map(i=>caps[i].gas).filter(n=>n!=="Boş");
+    const sharedGas=gasNames.length===0?"Boş":gasNames.every(n=>n===gasNames[0])?gasNames[0]:"Karışım";
+    if(g.hasPiston){
+      let molFixed=0;
+      for(const i of g.idx){if(i===3)continue;const nm=(P0*caps[i].V)/(R*caps[i].T);next[i]={...next[i],mol:nm<0.0001?0:nm,gas:nm<0.005?"Boş":sharedGas};molFixed+=nm;}
+      const molP=Math.max(0,g.totalMol-molFixed);const Vp=molP>0?(molP*R*caps[3].T)/P0:0.1;
+      next[3]={...next[3],mol:molP,V:Math.max(0.1,Vp),gas:molP<0.005?"Boş":sharedGas};
+    } else {
+      const Peq=(g.totalMol*R)/g.sumVT;
+      for(const i of g.idx){const nm=(Peq*caps[i].V)/(R*caps[i].T);next[i]={...next[i],mol:nm<0.0001?0:nm,gas:nm<0.005?"Boş":sharedGas};}
+    }
+  }
+  return next;
+}
 
-  useEffect(()=>{
-    if(!recording)return;
-    const t=setInterval(()=>{
-      tickRef.current+=1;
-      const pt={t:tickRef.current};
-      chambers.forEach((c,i)=>{ pt[`P${i+1}`]=parseFloat(idealP(c.mol,c.T,c.V).toFixed(3)); pt[`V${i+1}`]=parseFloat(c.V.toFixed(2)); });
-      setHistory(prev=>[...prev.slice(-80),pt]);
-    },300);
-    return()=>clearInterval(t);
-  },[recording,chambers]);
+const D2_INIT=[
+  {gas:"CH₄",mol:0.24,V:5.00,T:300},{gas:"He",mol:0.05,V:2.00,T:300},
+  {gas:"H₂", mol:0.19,V:3.00,T:300},{gas:"Ne",mol:0.16,V:4.00,T:300},
+];
+const CYL={x:310,y:140,h:100,maxW:220,minV:0.1,maxV:12};
+function pistonXD2(V){return CYL.x+Math.min(1,Math.max(0,(V-CYL.minV)/(CYL.maxV-CYL.minV)))*CYL.maxW;}
+function balloonRD2(V){return Math.max(36,Math.min(72,36+((V-0.5)/9.5)*36));}
+const D2_CARD_BORDERS=["#6366f1","#34d399","#eab308","#f472b6"];
+const D2_CARD_BGS=["#eef2ff","#d1fae5","#fefce8","#fce7f3"];
+const D2_CAP_LABELS=["1. Kap","2. Kap","3. Kap","4. Kap (Pistonlu)"];
 
-  const pvData=chambers.map((c,i)=>({
-    color:COLORS[i],
-    points:Array.from({length:30},(_,k)=>{ const V=0.5+k*0.5; return{x:parseFloat(V.toFixed(2)),y:parseFloat(idealP(c.mol,c.T,V).toFixed(3))}; })
-  }));
+function Duzenek2() {
+  const [caps,setCaps]=useState(D2_INIT.map(c=>({...c})));
+  const [valves,setValves]=useState({m1:false,m2:false,m3:false,m4:false});
+  const [P0,setP0]=useState(1.0);
+  const [tick,setTick]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>setTick(x=>(x+1)%60),80);return()=>clearInterval(t);},[]);
 
-  const pressures=chambers.map((c,i)=>({name:`${c.gas}(${i+1})`,value:parseFloat(idealP(c.mol,c.T,c.V).toFixed(3)),color:COLORS[i]}));
-  const totalP=pressures.reduce((s,p)=>s+p.value,0);
+  function toggleValve(key){const next={...valves,[key]:!valves[key]};setCaps(prev=>doEqD2(prev,next,P0));setValves(next);}
+  function toggleAll(){const a=Object.values(valves).every(Boolean);const next={m1:!a,m2:!a,m3:!a,m4:!a};setCaps(prev=>doEqD2(prev,next,P0));setValves(next);}
+  function reset(){setCaps(D2_INIT.map(c=>({...c})));setValves({m1:false,m2:false,m3:false,m4:false});setP0(1.0);}
+  function updateCap(i,field,val){setCaps(prev=>{const next=prev.map((c,idx)=>idx===i?{...c,[field]:val}:c);return Object.values(valves).some(Boolean)?doEqD2(next,valves,P0):next;});}
+  function changeGas(i,newGas){setCaps(prev=>{const next=prev.map((c,idx)=>{if(idx!==i)return c;return newGas==="Boş"?{...c,gas:"Boş",mol:0}:{...c,gas:newGas};});return Object.values(valves).some(Boolean)?doEqD2(next,valves,P0):next;});}
+  function handleP0(val){setP0(val);if(Object.values(valves).some(Boolean))setCaps(prev=>doEqD2(prev,valves,val));}
 
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",background:"white",borderRadius:10,padding:"8px 12px",border:"1px solid #e2e8f0"}}>
-        {[["PT","P-T Zaman"],["PV_time","V-T Zaman"],["PV_curve","P-V Eğrisi"],["Dalton","Dalton"]].map(([id,lbl])=>(
-          <Pill key={id} active={chart===id} onClick={()=>setChart(id)}>{lbl}</Pill>
-        ))}
-        <button onClick={()=>setRecording(r=>!r)} style={{
-          marginLeft:"auto",padding:"5px 12px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
-          background:recording?"#fee2e2":"#dcfce7",color:recording?"#dc2626":"#16a34a"
-        }}>{recording?"⏹ Durdur":"▶ Kaydet"}</button>
-        {history.length>0&&<button onClick={()=>{setHistory([]);tickRef.current=0;}} style={{padding:"5px 10px",borderRadius:8,border:"1px solid #e2e8f0",background:"white",color:"#94a3b8",cursor:"pointer",fontSize:10}}>Temizle</button>}
+  const pressures=caps.map(c=>(c.V>0&&c.mol>=0)?(c.mol*R*c.T)/c.V:0);
+  const allOpen=Object.values(valves).every(Boolean);
+  const anyOpen=Object.values(valves).some(Boolean);
+  const W=560,H=400;
+  const BALL_POS=[{cx:80,cy:115},{cx:80,cy:270},{cx:210,cy:193}];
+
+  function pipeEdge(a,b){
+    const r1=balloonRD2(caps[a].V);
+    const tx=b===3?CYL.x:BALL_POS[b].cx,ty=b===3?CYL.y+CYL.h/2:BALL_POS[b].cy;
+    const r2=b===3?0:balloonRD2(caps[b].V);
+    const sx=BALL_POS[a].cx,sy=BALL_POS[a].cy;
+    const dx=tx-sx,dy=ty-sy,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;
+    return{x1:sx+nx*(r1+5),y1:sy+ny*(r1+5),x2:tx-nx*(r2+5),y2:ty-ny*(r2+5),mx:(sx+tx)/2,my:(sy+ty)/2};
+  }
+  function pipeEdge01(){
+    const r1=balloonRD2(caps[0].V),r2=balloonRD2(caps[1].V);
+    const sx=BALL_POS[0].cx,sy=BALL_POS[0].cy,tx=BALL_POS[1].cx,ty=BALL_POS[1].cy;
+    const dx=tx-sx,dy=ty-sy,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;
+    return{x1:sx+nx*(r1+5),y1:sy+ny*(r1+5),x2:tx-nx*(r2+5),y2:ty-ny*(r2+5),mx:(sx+tx)/2,my:(sy+ty)/2};
+  }
+  function pipeEdge24(){
+    const r1=balloonRD2(caps[2].V);
+    const sx=BALL_POS[2].cx,sy=BALL_POS[2].cy,tx=CYL.x,ty=CYL.y+CYL.h/2;
+    const dx=tx-sx,dy=ty-sy,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;
+    return{x1:sx+nx*(r1+5),y1:sy+ny*(r1+5),x2:tx-4,y2:ty,mx:(sx+tx)/2,my:(sy+ty)/2};
+  }
+  const PIPES=[
+    {...pipeEdge(0,2),key:"m1",label:"M1"},
+    {...pipeEdge(1,2),key:"m2",label:"M2"},
+    {...pipeEdge01(),key:"m3",label:"M3"},
+    {...pipeEdge24(),key:"m4",label:"M4"},
+  ];
+  const pc=caps[3];
+  const px=pistonXD2(pc.V);
+  const pcGobj=pc.gas==="Boş"||pc.mol<0.005?{color:"#94a3b8",bg:"#f1f5f9"}:gasInfoD24(pc.gas);
+  const gasW=px-CYL.x;
+  const MARKS=["A","B","C","D","E"];
+  const markSpacing=CYL.maxW/(MARKS.length+1);
+
+  return (
+    <div style={{fontFamily:"'Inter',system-ui,sans-serif",background:"#f8fafc",padding:"16px 12px"}}>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>🔗 Düzenek 2 — Ayrı Kutular</div>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Musluk açılınca kutular birleşir · Son kap pistonlu (P₀ ile denge) · M1:1↔3 · M2:2↔3 · M3:1↔2 · M4:3↔4</div>
+      </div>
+      <div style={{background:"white",borderRadius:12,padding:"10px 14px",border:"1.5px solid #6366f133",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:12,fontWeight:800,color:"#6366f1",minWidth:28}}>P₀</span>
+        <input type="range" min={0.5} max={3} step={0.05} value={P0} onChange={e=>handleP0(parseFloat(e.target.value))} style={{flex:1,minWidth:80,accentColor:"#6366f1"}}/>
+        <input type="number" min={0.5} max={3} step={0.05} value={P0.toFixed(2)} onChange={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v>=0.5&&v<=3)handleP0(v);}} style={{width:58,padding:"3px 6px",borderRadius:8,border:"1.5px solid #6366f155",color:"#6366f1",fontWeight:700,fontSize:12,textAlign:"center",background:"white"}}/>
+        <span style={{fontSize:11,color:"#94a3b8"}}>atm</span>
+      </div>
+      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
+        {[{key:"m1",label:"M1: 1↔3"},{key:"m2",label:"M2: 2↔3"},{key:"m3",label:"M3: 1↔2"},{key:"m4",label:"M4: 3↔4"}].map(({key,label})=>{
+          const open=valves[key];
+          return(<button key={key} onClick={()=>toggleValve(key)} style={{padding:"6px 13px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:open?"#dcfce7":"#fee2e2",color:open?"#15803d":"#dc2626",outline:`2px solid ${open?"#22c55e":"#ef4444"}`}}>{label}: {open?"Açık":"Kapalı"}</button>);
+        })}
+        <button onClick={toggleAll} style={{padding:"6px 13px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:allOpen?"#fef3c7":"#dcfce7",color:allOpen?"#d97706":"#15803d",outline:`2px solid ${allOpen?"#f59e0b":"#22c55e"}`}}>{allOpen?"Tümünü Kapat":"Tümünü Aç"}</button>
+        <button onClick={reset} style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid #e2e8f0",background:"white",color:"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}}>↺ Sıfırla</button>
       </div>
 
-      <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-        {chart==="PT"&&<>
-          <SectionTitle>Basınç — Zaman</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={history}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-              <XAxis dataKey="t" stroke="#94a3b8" fontSize={10}/>
-              <YAxis stroke="#94a3b8" fontSize={10}/>
-              <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
-              {chambers.map((_,i)=><Line key={i} type="monotone" dataKey={`P${i+1}`} stroke={COLORS[i]} dot={false} strokeWidth={2} name={`Bölme ${i+1}`}/>)}
-            </LineChart>
-          </ResponsiveContainer>
-        </>}
-        {chart==="PV_time"&&<>
-          <SectionTitle>Hacim — Zaman</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={history}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-              <XAxis dataKey="t" stroke="#94a3b8" fontSize={10}/>
-              <YAxis stroke="#94a3b8" fontSize={10}/>
-              <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
-              {chambers.map((_,i)=><Area key={i} type="monotone" dataKey={`V${i+1}`} stroke={COLORS[i]} fill={COLORS[i]+"33"} strokeWidth={2} dot={false} name={`Bölme ${i+1}`}/>)}
-            </AreaChart>
-          </ResponsiveContainer>
-        </>}
-        {chart==="PV_curve"&&<>
-          <SectionTitle>P-V İzoterm Eğrisi (Boyle)</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-              <XAxis dataKey="x" stroke="#94a3b8" fontSize={10} name="V (L)"/>
-              <YAxis dataKey="y" stroke="#94a3b8" fontSize={10} name="P (atm)"/>
-              <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
-              {pvData.map((d,i)=><Scatter key={i} name={`Bölme ${i+1}`} data={d.points} fill={d.color}/>)}
-            </ScatterChart>
-          </ResponsiveContainer>
-        </>}
-        {chart==="Dalton"&&<>
-          <SectionTitle>Dalton Kısmi Basınçlar — Toplam: {totalP.toFixed(3)} atm</SectionTitle>
-          <div style={{display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
-            <PieChart width={200} height={200}>
-              <Pie data={pressures} dataKey="value" cx={95} cy={95} outerRadius={80} labelLine={false}
-                label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}>
-                {pressures.map((p,i)=><Cell key={i} fill={p.color}/>)}
-              </Pie>
-              <Tooltip formatter={v=>`${v} atm`} contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-            </PieChart>
-            <div style={{flex:1}}>
-              {pressures.map((p,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:12,height:12,borderRadius:3,background:p.color}}/>
-                  <div style={{fontSize:12,flex:1}}>{p.name}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:p.color}}>{p.value.toFixed(3)} atm</div>
+      <div style={{background:"white",borderRadius:16,border:"1px solid #e2e8f0",boxShadow:"0 2px 16px rgba(0,0,0,0.07)",marginBottom:14,overflow:"hidden"}}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:"block"}}>
+          {PIPES.map(p=>{const open=valves[p.key];return(<g key={p.key}><line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={open?"#22c55e":"#cbd5e1"} strokeWidth={open?4:3} strokeDasharray={open?"none":"8,5"}/><g onClick={()=>toggleValve(p.key)} style={{cursor:"pointer"}}><circle cx={p.mx} cy={p.my} r={13} fill={open?"#dcfce7":"#fee2e2"} stroke={open?"#22c55e":"#ef4444"} strokeWidth={2}/>{open?<rect x={p.mx-6.5} y={p.my-2.5} width={13} height={5} rx={2.5} fill="#22c55e"/>:<rect x={p.mx-2.5} y={p.my-6.5} width={5} height={13} rx={2.5} fill="#ef4444"/>}<text x={p.mx} y={p.my+24} textAnchor="middle" fill={open?"#15803d":"#dc2626"} fontSize={8} fontWeight={700}>{p.label}</text><text x={p.mx} y={p.my+33} textAnchor="middle" fill={open?"#15803d":"#dc2626"} fontSize={7}>{open?"Gaz Girişi":"Kapalı"}</text></g></g>);})}
+          {PIPES.map((p,pi)=>{if(!valves[p.key])return null;const t1=((tick+pi*15)%60)/60,t2=((tick+pi*15+30)%60)/60;return(<g key={"fp"+pi}><circle cx={p.x1+(p.x2-p.x1)*t1} cy={p.y1+(p.y2-p.y1)*t1} r={3} fill="#22c55e" opacity={0.85}/><circle cx={p.x1+(p.x2-p.x1)*t2} cy={p.y1+(p.y2-p.y1)*t2} r={2} fill="#4ade80" opacity={0.6}/></g>);})}
+          {[0,1,2].map(i=>{const c=caps[i];const isEmpty=c.gas==="Boş"||c.mol<0.005;const gObj=isEmpty?{color:"#94a3b8",bg:"#f1f5f9"}:gasInfoD24(c.gas);const r=balloonRD2(c.V);const P=pressures[i];const pColor=P<0.01?"#94a3b8":P>4?"#ef4444":"#16a34a";const pos=BALL_POS[i];return(<g key={i}><ellipse cx={pos.cx+4} cy={pos.cy+6} rx={r*0.85} ry={r*0.5} fill="rgba(0,0,0,0.05)"/><circle cx={pos.cx} cy={pos.cy} r={r} fill={gObj.bg} stroke={gObj.color} strokeWidth={2.5}/><ellipse cx={pos.cx-r*0.28} cy={pos.cy-r*0.28} rx={r*0.2} ry={r*0.14} fill="white" opacity={0.5}/>{isEmpty?<text x={pos.cx} y={pos.cy+4} textAnchor="middle" fill="#94a3b8" fontSize={12} fontWeight={700}>Boş</text>:<text x={pos.cx} y={pos.cy-11} textAnchor="middle" fill={gObj.color} fontSize={13} fontWeight={900}>{c.gas}</text>}<text x={pos.cx} y={pos.cy+(isEmpty?18:3)} textAnchor="middle" fill="#64748b" fontSize={10}>{c.mol.toFixed(2)} mol</text><text x={pos.cx} y={pos.cy+(isEmpty?30:15)} textAnchor="middle" fill="#0ea5e9" fontSize={10} fontWeight={700}>{c.V.toFixed(2)} L</text><text x={pos.cx} y={pos.cy+(isEmpty?42:27)} textAnchor="middle" fill={pColor} fontSize={11} fontWeight={900}>{P.toFixed(3)} atm</text><circle cx={pos.cx} cy={pos.cy+r} r={4} fill={gObj.color} opacity={0.5}/><text x={pos.cx} y={pos.cy-r-8} textAnchor="middle" fill="#64748b" fontSize={10} fontWeight={700}>{D2_CAP_LABELS[i]}</text></g>);})}
+          <rect x={CYL.x} y={CYL.y} width={CYL.maxW} height={CYL.h} rx={8} fill="#f8fafc" stroke="#94a3b8" strokeWidth={2}/>
+          <ellipse cx={CYL.x+CYL.maxW} cy={CYL.y+CYL.h/2} rx={10} ry={CYL.h/2} fill="#e2e8f0" stroke="#94a3b8" strokeWidth={2}/>
+          {gasW>2&&<rect x={CYL.x+1} y={CYL.y+2} width={Math.max(0,gasW-1)} height={CYL.h-4} rx={6} fill={pcGobj.bg} opacity={0.85}/>}
+          <rect x={px-8} y={CYL.y+4} width={16} height={CYL.h-8} rx={4} fill={pcGobj.color} opacity={0.8}/>
+          <text x={px+(CYL.x+CYL.maxW-px)/2} y={CYL.y+CYL.h/2+5} textAnchor="middle" fill="#6366f1" fontSize={11} fontWeight={700}>P₀={P0.toFixed(2)}</text>
+          {gasW>30&&pc.mol>=0.005&&<g>{pc.gas!=="Boş"&&<text x={CYL.x+gasW/2} y={CYL.y+CYL.h/2-18} textAnchor="middle" fill={pcGobj.color} fontSize={12} fontWeight={900}>{pc.gas}</text>}<text x={CYL.x+gasW/2} y={CYL.y+CYL.h/2-4} textAnchor="middle" fill="#64748b" fontSize={9}>{pc.mol.toFixed(2)} mol</text><text x={CYL.x+gasW/2} y={CYL.y+CYL.h/2+8} textAnchor="middle" fill="#0ea5e9" fontSize={9} fontWeight={700}>{pc.V.toFixed(2)} L</text><text x={CYL.x+gasW/2} y={CYL.y+CYL.h/2+20} textAnchor="middle" fill="#16a34a" fontSize={11} fontWeight={900}>{pressures[3].toFixed(3)} atm</text></g>}
+          <text x={CYL.x+CYL.maxW/2} y={CYL.y-10} textAnchor="middle" fill="#64748b" fontSize={10} fontWeight={700}>{D2_CAP_LABELS[3]}</text>
+          {MARKS.map((m,mi)=>{const mx=CYL.x+markSpacing*(mi+1);const near=Math.abs(mx-px)<markSpacing/2;return(<g key={m}><line x1={mx} y1={CYL.y+CYL.h} x2={mx} y2={CYL.y+CYL.h+8} stroke={near?"#6366f1":"#94a3b8"} strokeWidth={near?2:1.5}/><text x={mx} y={CYL.y+CYL.h+18} textAnchor="middle" fill={near?"#6366f1":"#94a3b8"} fontSize={10} fontWeight={near?900:600}>{m}</text></g>);})}
+          <text x={W/2} y={H-8} textAnchor="middle" fill="#cbd5e1" fontSize={9}>M1:1↔3 · M2:2↔3 · M3:1↔2 · M4:3↔4(pistonlu) · Musluğa tıkla → aç/kapat</text>
+        </svg>
+      </div>
+
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        {caps.map((c,i)=>{
+          const P=pressures[i];const borderC=D2_CARD_BORDERS[i];const bgC=D2_CARD_BGS[i];const isPiston=i===3;
+          return(<div key={i} style={{flex:"1 1 175px",background:bgC,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${borderC}44`,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+              <span style={{fontSize:13,fontWeight:800,color:borderC}}>{D2_CAP_LABELS[i]}</span>
+              <span style={{fontSize:13,fontWeight:900,color:P<0.01?"#94a3b8":"#16a34a"}}>{P.toFixed(3)} atm</span>
+            </div>
+            {isPiston&&<div style={{fontSize:10,color:"#6366f1",fontWeight:700,marginBottom:7,background:"#eef2ff",borderRadius:6,padding:"3px 8px"}}>🔩 Pistonlu — V otomatik, P = P₀</div>}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:10,color:"#94a3b8",marginBottom:4,fontWeight:600}}>GAZ CİNSİ</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                {[...GAS_LIST_D24.map(g=>g.label),"Boş"].map(g=>{const active=c.gas===g;const gObj=g==="Boş"?{color:"#94a3b8",bg:"#f1f5f9"}:gasInfoD24(g);return(<button key={g} onClick={()=>changeGas(i,g)} style={{padding:"2px 7px",borderRadius:10,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,background:active?gObj.bg:"white",color:active?gObj.color:"#cbd5e1",outline:active?`1.5px solid ${gObj.color}`:"1px solid #e2e8f0"}}>{g}</button>);})}
+              </div>
+            </div>
+            {[{label:"n (mol)",field:"mol",min:0,max:2,step:0.01,color:"#7c3aed",fmt:2},{label:"V (L)",field:"V",min:0.5,max:12,step:0.1,color:"#0ea5e9",fmt:2,readOnly:isPiston},{label:"T (K)",field:"T",min:100,max:800,step:5,color:"#f59e0b",fmt:0}].map(({label,field,min,max,step,color,fmt,readOnly})=>(
+              <div key={field} style={{marginBottom:8}}>
+                <span style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>{label}{readOnly?" (otomatik)":""}</span>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                  <input type="range" min={min} max={max} step={step} value={c[field]} disabled={readOnly} onChange={e=>!readOnly&&updateCap(i,field,parseFloat(e.target.value))} style={{flex:1,accentColor:color,opacity:readOnly?0.35:1}}/>
+                  <input type="number" min={min} max={max} step={step} value={Number(c[field]).toFixed(fmt)} readOnly={readOnly} onChange={e=>{if(readOnly)return;const v=parseFloat(e.target.value);if(!isNaN(v)&&v>=min&&v<=max)updateCap(i,field,v);}} style={{width:52,padding:"2px 5px",borderRadius:7,border:`1.5px solid ${color}${readOnly?"22":"66"}`,color:readOnly?"#94a3b8":color,fontWeight:700,fontSize:11,textAlign:"center",background:readOnly?"#f8fafc":"white"}}/>
                 </div>
-              ))}
-            </div>
-          </div>
-        </>}
-        {history.length===0&&chart!=="PV_curve"&&chart!=="Dalton"&&(
-          <div style={{textAlign:"center",color:"#cbd5e1",padding:"40px 0",fontSize:13}}>▶ Kaydet butonuna basarak başlayın</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════
-// TAB 3 — MAXWELL-BOLTZMANN
-// ═══════════════════════════════════════════
-function MaxwellTab() {
-  const [gasA,setGasA]=useState("He");
-  const [gasB,setGasB]=useState("N₂");
-  const [tempA,setTempA]=useState(300);
-  const [tempB,setTempB]=useState(600);
-  const [showB,setShowB]=useState(true);
-
-  function mb(v,T,M){ const m=M/1000/NA; const a=Math.sqrt(KB*T/m); return 4*Math.PI*v*v*Math.pow(1/(Math.sqrt(2*Math.PI)*a),3)*Math.exp(-v*v/(2*a*a)); }
-  function curve(gas,T){ const M=gasObj(gas).molar; const vMax=Math.sqrt(2*KB*T/(M/1000/NA))*4; return Array.from({length:120},(_,i)=>{ const v=(i/119)*vMax; return{v:Math.round(v),f:parseFloat((mb(v,T,M)*1e-3).toFixed(6))}; }); }
-
-  const dA=useMemo(()=>curve(gasA,tempA),[gasA,tempA]);
-  const dB=useMemo(()=>curve(gasB,tempB),[gasB,tempB]);
-  const merged=dA.map((d,i)=>({v:d.v,A:d.f,B:dB[i]?.f??0}));
-
-  const vp=(T,M)=>Math.sqrt(2*KB*T/(M/1000/NA));
-  const va=(T,M)=>Math.sqrt(8*KB*T/(Math.PI*M/1000/NA));
-  const vr=(T,M)=>Math.sqrt(3*KB*T/(M/1000/NA));
-
-  const gA=gasObj(gasA),gB=gasObj(gasB);
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        {[[gasA,setGasA,tempA,setTempA,gA,"A"],[gasB,setGasB,tempB,setTempB,gB,"B"]].map(([gas,setGas,temp,setTemp,gObj,lbl])=>(
-          <div key={lbl} style={{flex:"1 1 220px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-            <SectionTitle>Gaz {lbl} — <span style={{color:gObj.color}}>{gas}</span></SectionTitle>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
-              {GAS_PRESETS.map(g=><Pill key={g.label} active={gas===g.label} color={g.color} onClick={()=>setGas(g.label)}>{g.label}</Pill>)}
-            </div>
-            <Slider label="Sıcaklık" value={temp} min={50} max={1200} step={10} unit="K" color={gObj.color} onChange={setTemp}/>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
-              <StatCard label="v_mp" value={Math.round(vp(temp,gObj.molar))} unit="m/s" color={gObj.color}/>
-              <StatCard label="v_avg" value={Math.round(va(temp,gObj.molar))} unit="m/s" color={gObj.color}/>
-              <StatCard label="v_rms" value={Math.round(vr(temp,gObj.molar))} unit="m/s" color={gObj.color}/>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-          <SectionTitle>Hız Dağılımı</SectionTitle>
-          <Pill active={showB} onClick={()=>setShowB(b=>!b)}>Karşılaştır</Pill>
-        </div>
-        <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={merged}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-            <XAxis dataKey="v" stroke="#94a3b8" fontSize={10} label={{value:"v (m/s)",position:"insideBottomRight",offset:-5,fill:"#94a3b8",fontSize:10}}/>
-            <YAxis stroke="#94a3b8" fontSize={10}/>
-            <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-            <Legend wrapperStyle={{fontSize:11}}/>
-            <Area type="monotone" dataKey="A" stroke={gA.color} fill={gA.color+"33"} strokeWidth={2} dot={false} name={`${gasA}@${tempA}K`}/>
-            {showB&&<Area type="monotone" dataKey="B" stroke={gB.color} fill={gB.color+"22"} strokeWidth={2} dot={false} name={`${gasB}@${tempB}K`}/>}
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════
-// TAB 4 — EĞİTİM MODU
-// ═══════════════════════════════════════════
-const EXPERIMENTS=[
-  {id:"boyle",title:"Boyle Yasası",formula:"P₁V₁ = P₂V₂",color:"#f87171",
-    steps:[{label:"V=2L",mol:0.5,V:2,T:300},{label:"V=4L",mol:0.5,V:4,T:300},{label:"V=6L",mol:0.5,V:6,T:300},{label:"V=8L",mol:0.5,V:8,T:300}]},
-  {id:"charles",title:"Charles Yasası",formula:"V₁/T₁ = V₂/T₂",color:"#60a5fa",
-    steps:[{label:"T=150K",mol:0.5,V:4,T:150},{label:"T=300K",mol:0.5,V:8,T:300},{label:"T=450K",mol:0.5,V:12,T:450},{label:"T=600K",mol:0.5,V:16,T:600}]},
-  {id:"gay",title:"Gay-Lussac",formula:"P₁/T₁ = P₂/T₂",color:"#4ade80",
-    steps:[{label:"T=200K",mol:0.5,V:5,T:200},{label:"T=400K",mol:0.5,V:5,T:400},{label:"T=600K",mol:0.5,V:5,T:600},{label:"T=800K",mol:0.5,V:5,T:800}]},
-];
-
-const QUIZ=[
-  {q:"Sıcaklık 300K→600K, hacim sabit. Basınç ne olur?",opts:["2 katına çıkar","Yarıya düşer","Değişmez","4 katına çıkar"],ans:0,law:"Gay-Lussac"},
-  {q:"Hacim 4L→2L, sıcaklık sabit. Basınç ne olur?",opts:["Yarıya düşer","Değişmez","2 katına çıkar","4 katına çıkar"],ans:2,law:"Boyle"},
-  {q:"PV=nRT'de R nedir?",opts:["Sıcaklık sabiti","İdeal gaz sabiti","Mol sayısı","Basınç birimi"],ans:1,law:"İdeal Gaz"},
-  {q:"Maxwell-Boltzmann'da T artınca dağılım ne olur?",opts:["Sola kayar","Değişmez","Sağa kayar ve düzleşir","Daralır"],ans:2,law:"Kinetik"},
-  {q:"Van der Waals idealden ne zaman ayrışır?",opts:["Düşük P","Yüksek T","Yüksek P/düşük T","Düşük n"],ans:2,law:"Gerçek Gaz"},
-];
-
-function EduTab() {
-  const [exp,setExp]=useState(null);
-  const [step,setStep]=useState(0);
-  const [mode,setMode]=useState("exp");
-  const [qIdx,setQIdx]=useState(0);
-  const [sel,setSel]=useState(null);
-  const [score,setScore]=useState(0);
-  const [done,setDone]=useState(false);
-
-  const curExp=exp?EXPERIMENTS.find(e=>e.id===exp):null;
-  const curStep=curExp?.steps[step]||null;
-  const P=curStep?idealP(curStep.mol,curStep.T,curStep.V):0;
-  const chartData=curExp?curExp.steps.map(s=>({label:s.label,P:parseFloat(idealP(s.mol,s.T,s.V).toFixed(3)),V:s.V,T:s.T})):[];
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",gap:6}}>
-        <Pill active={mode==="exp"} onClick={()=>setMode("exp")} color="#6366f1">🧪 Deney</Pill>
-        <Pill active={mode==="quiz"} onClick={()=>setMode("quiz")} color="#f59e0b">❓ Quiz</Pill>
-      </div>
-
-      {mode==="exp"&&<>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {EXPERIMENTS.map(e=>(
-            <button key={e.id} onClick={()=>{setExp(e.id);setStep(0);}} style={{
-              flex:"1 1 180px",padding:"10px 12px",borderRadius:10,border:"none",cursor:"pointer",textAlign:"left",
-              background:exp===e.id?e.color+"22":"white",outline:exp===e.id?`1.5px solid ${e.color}`:"1px solid #e2e8f0",
-              boxShadow:"0 1px 4px rgba(0,0,0,0.05)"
-            }}>
-              <div style={{fontSize:13,fontWeight:700,color:e.color}}>{e.title}</div>
-              <div style={{fontSize:10,color:"#94a3b8",fontFamily:"monospace",marginTop:2}}>{e.formula}</div>
-            </button>
-          ))}
-        </div>
-        {curExp&&<div style={{background:"white",borderRadius:12,padding:14,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:curExp.color}}>{curExp.title}</div>
-              <div style={{fontSize:12,fontFamily:"monospace",background:"#f8fafc",padding:"3px 8px",borderRadius:5,marginTop:4,color:"#1e293b"}}>{curExp.formula}</div>
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>step>0&&setStep(s=>s-1)} disabled={step===0} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e2e8f0",background:"white",color:step===0?"#cbd5e1":"#64748b",cursor:step===0?"not-allowed":"pointer",fontSize:12}}>←</button>
-              <button onClick={()=>step<curExp.steps.length-1&&setStep(s=>s+1)} disabled={step===curExp.steps.length-1} style={{padding:"5px 12px",borderRadius:8,border:"none",background:curExp.color+"22",color:curExp.color,cursor:"pointer",fontWeight:700,fontSize:12}}>→</button>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-            {curExp.steps.map((s,i)=>(
-              <button key={i} onClick={()=>setStep(i)} style={{
-                padding:"5px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,
-                background:i===step?curExp.color+"22":"#f8fafc",color:i===step?curExp.color:"#94a3b8",
-                outline:i===step?`1.5px solid ${curExp.color}`:"none"
-              }}>{s.label}</button>
+              </div>
             ))}
-          </div>
-          {curStep&&<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-            <StatCard label="n (mol)" value={curStep.mol.toFixed(2)} unit="mol" color="#6366f1"/>
-            <StatCard label="V (L)" value={curStep.V.toFixed(1)} unit="L" color="#0ea5e9"/>
-            <StatCard label="T (K)" value={curStep.T} unit="K" color={tempClr(curStep.T)}/>
-            <StatCard label="P (atm)" value={P.toFixed(3)} unit="atm" color={curExp.color}/>
-            <StatCard label="PV" value={(P*curStep.V).toFixed(3)} unit="atm·L" color="#16a34a"/>
-          </div>}
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-              <XAxis dataKey="label" stroke="#94a3b8" fontSize={10}/>
-              <YAxis stroke="#94a3b8" fontSize={10}/>
-              <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
-              <Line type="monotone" dataKey="P" stroke={curExp.color} strokeWidth={2} dot={{r:4}} name="P (atm)"/>
-              <Line type="monotone" dataKey="V" stroke="#0ea5e9" strokeWidth={2} dot={{r:4}} name="V (L)" strokeDasharray="5 3"/>
-            </LineChart>
-          </ResponsiveContainer>
-        </div>}
-      </>}
-
-      {mode==="quiz"&&<div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #e2e8f0",maxWidth:560,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-        {done?<div style={{textAlign:"center",padding:"20px 0"}}>
-          <div style={{fontSize:36,marginBottom:8}}>{score>=4?"🏆":score>=3?"🎯":"📚"}</div>
-          <div style={{fontSize:20,fontWeight:800,color:"#1e293b",marginBottom:4}}>{score}/{QUIZ.length} Doğru</div>
-          <button onClick={()=>{setQIdx(0);setSel(null);setScore(0);setDone(false);}} style={{
-            marginTop:12,padding:"8px 20px",borderRadius:9,border:"none",background:"#6366f1",color:"white",fontWeight:700,cursor:"pointer"
-          }}>Tekrar</button>
-        </div>:<>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-            <span style={{fontSize:10,color:"#94a3b8"}}>Soru {qIdx+1}/{QUIZ.length}</span>
-            <span style={{fontSize:11,color:"#f59e0b",fontWeight:700}}>Puan: {score}</span>
-          </div>
-          <div style={{fontSize:11,color:"#94a3b8",background:"#f8fafc",borderRadius:6,padding:"4px 8px",marginBottom:10}}>{QUIZ[qIdx].law}</div>
-          <div style={{fontSize:14,fontWeight:600,color:"#1e293b",marginBottom:14,lineHeight:1.5}}>{QUIZ[qIdx].q}</div>
-          <div style={{display:"flex",flexDirection:"column",gap:7}}>
-            {QUIZ[qIdx].opts.map((o,i)=>{
-              const isRight=i===QUIZ[qIdx].ans,isSel=i===sel;
-              return(
-                <button key={i} onClick={()=>{ if(sel!==null)return; setSel(i); if(i===QUIZ[qIdx].ans)setScore(s=>s+1); }} style={{
-                  padding:"9px 12px",borderRadius:9,border:"none",cursor:sel===null?"pointer":"default",textAlign:"left",fontSize:12,fontWeight:500,
-                  background:sel===null?"#f8fafc":isRight?"#dcfce7":isSel?"#fee2e2":"#f8fafc",
-                  color:sel===null?"#1e293b":isRight?"#16a34a":isSel?"#dc2626":"#94a3b8",
-                  outline:isSel?(isRight?"1.5px solid #16a34a":"1.5px solid #dc2626"):"none"
-                }}>{String.fromCharCode(65+i)}) {o}{sel!==null&&isRight?" ✓":""}{sel!==null&&isSel&&!isRight?" ✗":""}</button>
-              );
-            })}
-          </div>
-          {sel!==null&&<button onClick={()=>{ if(qIdx<QUIZ.length-1){setQIdx(q=>q+1);setSel(null);}else setDone(true); }} style={{
-            marginTop:12,width:"100%",padding:"9px",borderRadius:9,border:"none",background:"#6366f1",color:"white",fontWeight:700,cursor:"pointer",fontSize:13
-          }}>{qIdx<QUIZ.length-1?"Sonraki →":"Sonucu Gör"}</button>}
-        </>}
-      </div>}
+          </div>);
+        })}
+      </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════
-// TAB 5 — GERÇEK GAZ
-// ═══════════════════════════════════════════
-function RealGasTab() {
-  const [gas,setGas]=useState("CO₂");
-  const [mol,setMol]=useState(1.0);
-  const [V,setV]=useState(3);
+// ══════════════════════════════════════════════════════════════
+// DÜZENEK 3
+// ══════════════════════════════════════════════════════════════
+function Duzenek3() {
+  const [mol,setMol]=useState(0.5);
   const [T,setT]=useState(300);
-  const [mode,setMode]=useState("compare");
-  const [mixGases,setMixGases]=useState([{gas:"N₂",mol:0.4},{gas:"O₂",mol:0.3},{gas:"CO₂",mol:0.2}]);
-  const [mixV,setMixV]=useState(5);
-  const [mixT,setMixT]=useState(300);
-  const [chamH,setChamH]=useState([{gas:"He",mol:0.3,V:3,T:600},{gas:"N₂",mol:0.4,V:3,T:200}]);
-  const [running,setRunning]=useState(false);
+  const [P0,setP0]=useState(1.0);
+  const [engel,setEngel]=useState(6);
+  const [valveOpen,setValveOpen]=useState(false);
+  const [addMol,setAddMol]=useState(0.1);
+  const [animTick,setAnimTick]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>setAnimTick(x=>x+1),80);return()=>clearInterval(t);},[]);
 
-  useEffect(()=>{
-    if(!running)return;
-    const t=setInterval(()=>setChamH(prev=>{
-      const [a,b]=prev; const d=(a.T-b.T)*0.04;
-      return[{...a,T:Math.max(50,a.T-d)},{...b,T:Math.min(1000,b.T+d)}];
-    }),100);
-    return()=>clearInterval(t);
-  },[running]);
+  const V=mol*R*T/P0;
+  const engelHit=V>=engel;
+  const pistonV=engelHit?engel:V;
+  const finalP=engelHit?(mol*R*T)/engel:P0;
+  const SW=900,SH=280,CY=60,CH=160,LEFT=80,CW=720;
+  const scale=CW/12;
+  const pistonX=LEFT+pistonV*scale;
+  const engelX=LEFT+engel*scale;
+  const particleCount=Math.max(5,Math.min(20,Math.round(mol*12)));
+  const particles=Array.from({length:particleCount},(_,i)=>{
+    const sp=0.15+(T/300)*0.38;
+    const seed=i*173.1+animTick*sp;
+    const px=LEFT+16+((Math.sin(seed*0.61+i)*0.5+0.5)*(Math.min(pistonX-LEFT,CW)-32));
+    const py=CY+16+((Math.cos(seed*0.43+i*1.3)*0.5+0.5)*(CH-32));
+    return <circle key={i} cx={px} cy={py} r={5} fill="#1d4ed8" opacity={0.65}/>;
+  });
 
-  const gObj=gasObj(gas);
-  const Pi=idealP(mol,T,V);
-  const Pv=vdwP(mol,T,V,gObj.a,gObj.b);
-  const diff=Pi>0?((Pv-Pi)/Pi*100).toFixed(2):"0";
-  const curve=Array.from({length:60},(_,i)=>{ const Vi=0.3+i*0.25; return{V:parseFloat(Vi.toFixed(2)),ideal:parseFloat(idealP(mol,T,Vi).toFixed(3)),vdw:parseFloat(Math.max(0,vdwP(mol,T,Vi,gObj.a,gObj.b)).toFixed(3))}; });
-  const totalMol=mixGases.reduce((s,g)=>s+g.mol,0);
-  const partials=mixGases.map(g=>({...g,P:parseFloat(idealP(g.mol,mixT,mixV).toFixed(3)),frac:parseFloat((g.mol/totalMol).toFixed(3)),color:gasObj(g.gas).color}));
-  const totalMixP=partials.reduce((s,g)=>s+g.P,0);
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <Pill active={mode==="compare"} onClick={()=>setMode("compare")} color="#6366f1">⚗️ İdeal vs VdW</Pill>
-        <Pill active={mode==="mixture"} onClick={()=>setMode("mixture")} color="#0ea5e9">🧪 Karışım</Pill>
-        <Pill active={mode==="heat"} onClick={()=>setMode("heat")} color="#f59e0b">🌡️ Isı Transferi</Pill>
+  return (
+    <div>
+      <div style={{background:"white",borderRadius:12,padding:"10px 14px",marginBottom:8,border:"1px solid #e2e8f0"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e293b",marginBottom:2}}>🚧 Düzenek 3 — Pistonlu + Engelli Silindir</div>
+        <div style={{fontSize:11,color:"#94a3b8"}}>Musluktan gaz ekle → Engele kadar İzobar (P sabit, V artar) → Engelten sonra İzokor (V sabit, P artar)</div>
+      </div>
+      <div style={{background:"white",borderRadius:10,padding:"8px 12px",marginBottom:8,border:"1px solid #e2e8f0",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <button onClick={()=>setValveOpen(o=>!o)} style={{padding:"4px 10px",borderRadius:7,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,background:valveOpen?"#dcfce7":"#fee2e2",color:valveOpen?"#16a34a":"#dc2626",outline:valveOpen?"1.5px solid #22c55e":"1.5px solid #ef4444"}}>Musluk M: {valveOpen?"Açık":"Kapalı"}</button>
+        {valveOpen&&<><button onClick={()=>setMol(m=>Math.max(0.05,m-addMol))} style={{width:24,height:24,borderRadius:5,border:"none",cursor:"pointer",background:"#fee2e2",color:"#dc2626",fontWeight:700}}>−</button><Slider label="" value={addMol} min={0.05} max={0.5} step={0.05} unit="mol" color="#22c55e" onChange={setAddMol}/><button onClick={()=>setMol(m=>m+addMol)} style={{width:24,height:24,borderRadius:5,border:"none",cursor:"pointer",background:"#dcfce7",color:"#16a34a",fontWeight:700}}>+</button></>}
+        <div style={{width:1,height:22,background:"#e2e8f0"}}/>
+        <div style={{background:engelHit?"#fee2e2":"#dcfce7",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:700,color:engelHit?"#dc2626":"#16a34a"}}>{engelHit?"🔴 İzokor — V sabit":"🟢 İzobar — P sabit"}</div>
+        <button onClick={()=>{setMol(0.5);setValveOpen(false);}} style={{padding:"4px 10px",borderRadius:7,border:"1px solid #e2e8f0",background:"white",color:"#94a3b8",cursor:"pointer",fontSize:10}}>↺ Sıfırla</button>
       </div>
 
-      {mode==="compare"&&<>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          <div style={{flex:"1 1 200px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-            <SectionTitle>Gaz Seç</SectionTitle>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
-              {GAS_PRESETS.map(g=><Pill key={g.label} active={gas===g.label} color={g.color} onClick={()=>setGas(g.label)}>{g.label}</Pill>)}
-            </div>
-            <Slider label="n (mol)" value={mol} min={0.1} max={4} step={0.1} unit="mol" color={gObj.color} onChange={setMol}/>
-            <Slider label="V (L)" value={V} min={0.3} max={20} step={0.1} unit="L" color="#0ea5e9" onChange={setV}/>
-            <Slider label="T (K)" value={T} min={50} max={1000} step={5} unit="K" color={tempClr(T)} onChange={setT}/>
-            <div style={{marginTop:8,background:"#f8fafc",borderRadius:8,padding:8,fontSize:10,color:"#94a3b8"}}>
-              a={gObj.a} L²atm/mol² · b={gObj.b} L/mol
-            </div>
-          </div>
-          <div style={{flex:"1 1 200px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-            <SectionTitle>Sonuçlar</SectionTitle>
-            <div style={{background:"#f8fafc",borderRadius:8,padding:10,marginBottom:8}}>
-              <div style={{fontSize:10,color:"#94a3b8"}}>İdeal Gaz</div>
-              <div style={{fontSize:22,fontWeight:800,color:"#0ea5e9"}}>{Pi.toFixed(4)} <span style={{fontSize:12}}>atm</span></div>
-            </div>
-            <div style={{background:"#f8fafc",borderRadius:8,padding:10,marginBottom:8}}>
-              <div style={{fontSize:10,color:"#94a3b8"}}>Van der Waals</div>
-              <div style={{fontSize:22,fontWeight:800,color:gObj.color}}>{isNaN(Pv)?"-":Pv.toFixed(4)} <span style={{fontSize:12}}>atm</span></div>
-            </div>
-            <div style={{background:"#f8fafc",borderRadius:8,padding:10}}>
-              <div style={{fontSize:10,color:"#94a3b8"}}>Fark</div>
-              <div style={{fontSize:18,fontWeight:800,color:Math.abs(parseFloat(diff))>5?"#dc2626":"#16a34a"}}>{diff}%</div>
-            </div>
-          </div>
-        </div>
-        <div style={{background:"white",borderRadius:12,padding:14,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <SectionTitle>P-V: İdeal vs Van der Waals</SectionTitle>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={curve}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-              <XAxis dataKey="V" stroke="#94a3b8" fontSize={10}/>
-              <YAxis stroke="#94a3b8" fontSize={10}/>
-              <Tooltip contentStyle={{background:"white",border:"1px solid #e2e8f0",borderRadius:8,fontSize:11}}/>
-              <Legend wrapperStyle={{fontSize:11}}/>
-              <Line type="monotone" dataKey="ideal" stroke="#0ea5e9" strokeWidth={2} dot={false} name="İdeal"/>
-              <Line type="monotone" dataKey="vdw" stroke={gObj.color} strokeWidth={2} dot={false} strokeDasharray="6 3" name={`${gas} VdW`}/>
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </>}
+      <svg viewBox={`0 0 ${SW} ${SH}`} width="100%" style={{display:"block",borderRadius:16,background:"white",border:"1px solid #e2e8f0",boxShadow:"0 4px 20px rgba(0,0,0,0.08)",marginBottom:8}}>
+        <defs><marker id="a3" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto"><path d="M7,0 L7,7 L0,3.5z" fill="#94a3b8"/></marker></defs>
+        <rect x={LEFT} y={CY} width={CW} height={CH} fill="#f8fafc" stroke="#94a3b8" strokeWidth={2} rx={4}/>
+        <rect x={LEFT} y={CY} width={Math.min(pistonX-LEFT,CW)} height={CH} fill="#bfdbfe" opacity={0.7}/>
+        {particles}
+        <line x1={LEFT} y1={CY} x2={LEFT+CW} y2={CY} stroke="#94a3b8" strokeWidth={2.5}/>
+        <line x1={LEFT} y1={CY+CH} x2={LEFT+CW} y2={CY+CH} stroke="#94a3b8" strokeWidth={2.5}/>
+        <rect x={engelX-4} y={CY-10} width={8} height={CH+20} fill="#334155" rx={2}/>
+        <text x={engelX} y={CY-15} textAnchor="middle" fill="#334155" fontSize={10} fontWeight="700">Engel</text>
+        <PistonSVG cx={pistonX} y={CY} h={CH}/>
+        <text x={pistonX} y={CY-15} textAnchor="middle" fill="#1d4ed8" fontSize={10} fontWeight="700">İdeal Piston</text>
+        <line x1={LEFT+CW-10} y1={CY+CH/2} x2={pistonX+20} y2={CY+CH/2} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4,3" markerEnd="url(#a3)"/>
+        <text x={LEFT+CW} y={CY+CH/2-6} textAnchor="end" fill="#94a3b8" fontSize={10}>P₀={P0}atm</text>
+        <text x={LEFT+Math.min(pistonX-LEFT,CW)/2} y={CY+CH/2-8} textAnchor="middle" fill="#1e40af" fontSize={14} fontWeight="800">{mol.toFixed(3)} mol</text>
+        <text x={LEFT+Math.min(pistonX-LEFT,CW)/2} y={CY+CH/2+12} textAnchor="middle" fill={pClr(finalP)} fontSize={15} fontWeight="800">{finalP.toFixed(3)} atm</text>
+        <text x={LEFT+Math.min(pistonX-LEFT,CW)/2} y={CY+CH/2+30} textAnchor="middle" fill="#0ea5e9" fontSize={12}>{pistonV.toFixed(3)} L</text>
+        <rect x={LEFT-12} y={CY} width={12} height={CH} fill="#d1d5db" stroke="#94a3b8" strokeWidth={2}/>
+        <ValveSVG x={LEFT-24} y={CY+CH/2} open={valveOpen} onClick={()=>setValveOpen(o=>!o)} label="M"/>
+        {["A","B","C","D","E","F","G","H"].map((m,i)=>{
+          const mx=LEFT+(i+0.5)*(CW/8);
+          return <g key={m}><line x1={mx} y1={CY+CH} x2={mx} y2={CY+CH+8} stroke="#94a3b8" strokeWidth={1.5}/><text x={mx} y={CY+CH+18} textAnchor="middle" fill="#64748b" fontSize={10}>{m}</text></g>;
+        })}
+      </svg>
 
-      {mode==="mixture"&&<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <div style={{flex:"1 1 200px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <SectionTitle>Karışım</SectionTitle>
-          <Slider label="Toplam V" value={mixV} min={1} max={20} step={0.5} unit="L" color="#0ea5e9" onChange={setMixV}/>
-          <Slider label="T" value={mixT} min={50} max={1000} step={5} unit="K" color={tempClr(mixT)} onChange={setMixT}/>
-          {mixGases.map((g,i)=>(
-            <div key={i} style={{marginBottom:8,background:"#f8fafc",borderRadius:8,padding:8}}>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
-                {GAS_PRESETS.slice(0,5).map(pg=><Pill key={pg.label} active={g.gas===pg.label} color={pg.color} onClick={()=>setMixGases(prev=>prev.map((x,j)=>j===i?{...x,gas:pg.label}:x))}>{pg.label}</Pill>)}
-              </div>
-              <Slider label={`Mol ${i+1}`} value={g.mol} min={0.05} max={2} step={0.05} unit="mol" color={gasObj(g.gas).color} onChange={v=>setMixGases(prev=>prev.map((x,j)=>j===i?{...x,mol:v}:x))}/>
-            </div>
-          ))}
-        </div>
-        <div style={{flex:"1 1 200px",background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-          <SectionTitle>Dalton — Toplam: {totalMixP.toFixed(3)} atm</SectionTitle>
-          {partials.map((g,i)=>(
-            <div key={i} style={{marginBottom:8}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:12,color:g.color,fontWeight:700}}>{g.gas}</span>
-                <span style={{fontSize:12}}>{g.P.toFixed(3)} atm ({(g.frac*100).toFixed(0)}%)</span>
-              </div>
-              <div style={{height:8,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${g.frac*100}%`,background:g.color,borderRadius:4}}/>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>}
-
-      {mode==="heat"&&<div style={{background:"white",borderRadius:12,padding:14,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-        <SectionTitle>İki Bölme Arası Isı Transferi</SectionTitle>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
-          {chamH.map((c,i)=>(
-            <div key={i} style={{flex:"1 1 160px",background:"#f8fafc",borderRadius:10,padding:10,border:`1px solid ${tempClr(c.T)}55`}}>
-              <div style={{fontSize:12,fontWeight:700,color:tempClr(c.T),marginBottom:8}}>Bölme {i+1} — {c.gas}</div>
-              <div style={{display:"flex",gap:6}}>
-                <StatCard label="T (K)" value={Math.round(c.T)} unit="K" color={tempClr(c.T)}/>
-                <StatCard label="P (atm)" value={idealP(c.mol,c.T,c.V).toFixed(3)} unit="atm" color={pClr(idealP(c.mol,c.T,c.V))}/>
-              </div>
-              <div style={{marginTop:8,height:8,background:"#e2e8f0",borderRadius:4,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${((c.T-50)/950)*100}%`,background:tempClr(c.T),borderRadius:4,transition:"width .2s"}}/>
-              </div>
-              {!running&&<div style={{marginTop:8}}>
-                <Slider label="Başlangıç T" value={c.T} min={50} max={1000} step={10} unit="K" color={tempClr(c.T)}
-                  onChange={v=>setChamH(prev=>prev.map((x,j)=>j===i?{...x,T:v}:x))}/>
-              </div>}
-            </div>
-          ))}
-        </div>
-        <div style={{textAlign:"center",marginBottom:12,fontSize:13}}>
-          {Math.abs(chamH[0].T-chamH[1].T)<2
-            ?<span style={{color:"#16a34a",fontWeight:700}}>⚖️ Termal Denge — T≈{Math.round(chamH[0].T)}K</span>
-            :<span style={{color:"#f59e0b"}}>ΔT = {Math.round(Math.abs(chamH[0].T-chamH[1].T))} K</span>}
-        </div>
-        <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-          <button onClick={()=>setRunning(r=>!r)} style={{
-            padding:"8px 20px",borderRadius:9,border:"none",cursor:"pointer",fontWeight:700,
-            background:running?"#fee2e2":"#dcfce7",color:running?"#dc2626":"#16a34a"
-          }}>{running?"⏹ Durdur":"▶ Başlat"}</button>
-          <button onClick={()=>{setRunning(false);setChamH([{gas:"He",mol:0.3,V:3,T:600},{gas:"N₂",mol:0.4,V:3,T:200}]);}} style={{
-            padding:"8px 16px",borderRadius:9,border:"1px solid #e2e8f0",background:"white",color:"#94a3b8",cursor:"pointer"
-          }}>↺ Sıfırla</button>
-        </div>
-      </div>}
+      <div style={{background:"white",borderRadius:10,padding:14,border:"1px solid #e2e8f0",display:"flex",gap:14,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:160}}><Slider label="T (K)" value={T} min={50} max={1000} step={5} unit="K" color={tempClr(T)} onChange={setT}/></div>
+        <div style={{flex:1,minWidth:160}}><Slider label="P₀ (atm)" value={P0} min={0.5} max={3} step={0.1} unit="atm" color="#3b82f6" onChange={setP0}/></div>
+        <div style={{flex:1,minWidth:160}}><Slider label="Engel (L)" value={engel} min={2} max={10} step={0.5} unit="L" color="#334155" onChange={setEngel}/></div>
+      </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════
-// ROOT APP
-// ═══════════════════════════════════════════
-export default function App() {
-  const [tab,setTab]=useState("sim");
-  const [chambers,setChambers]=useState(defaultChambers(3));
-  const [numChambers,setNumChambers]=useState(3);
-  const [leftOpen,setLeftOpen]=useState(true);
-  const [rightOpen,setRightOpen]=useState(true);
-  const [leftP,setLeftP]=useState(1.0);
-  const [rightP,setRightP]=useState(1.0);
+// ══════════════════════════════════════════════════════════════
+// DÜZENEK 4 (Balon Sistemi)
+// ══════════════════════════════════════════════════════════════
+function doEqD4(caps, valves) {
+  const par=[0,1,2];
+  const find=(x)=>par[x]===x?x:(par[x]=find(par[x]));
+  const union=(a,b)=>{par[find(a)]=find(b);};
+  if(valves.m1)union(0,1);if(valves.m2)union(1,2);if(valves.m3)union(0,2);
+  const groups={};
+  for(let i=0;i<3;i++){const root=find(i);if(!groups[root])groups[root]={totalMol:0,sumVT:0,idx:[]};groups[root].totalMol+=caps[i].mol;groups[root].sumVT+=caps[i].V/caps[i].T;groups[root].idx.push(i);}
+  const next=caps.map(c=>({...c}));
+  for(const g of Object.values(groups)){
+    if(g.idx.length<2)continue;
+    const Peq=(g.totalMol*R)/g.sumVT;
+    const gasNames=g.idx.map(i=>caps[i].gas).filter(n=>n!=="Boş");
+    const sharedGas=gasNames.length===0?"Boş":gasNames.every(n=>n===gasNames[0])?gasNames[0]:"Karışım";
+    for(const i of g.idx){const nm=(Peq*caps[i].V)/(R*caps[i].T);next[i]={...next[i],mol:nm,gas:nm<0.005?"Boş":sharedGas};}
+  }
+  return next;
+}
+const D4_INIT=[{gas:"Ne",mol:0.16,V:2.00,T:300},{gas:"Boş",mol:0.00,V:2.00,T:300},{gas:"SO₃",mol:0.24,V:1.00,T:300}];
+function balloonRD4(V){return Math.max(42,Math.min(80,42+((V-0.5)/9.5)*38));}
 
+function Duzenek4() {
+  const [caps,setCaps]=useState(D4_INIT.map(c=>({...c})));
+  const [valves,setValves]=useState({m1:false,m2:false,m3:false});
+  const [tick,setTick]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>setTick(x=>(x+1)%60),80);return()=>clearInterval(t);},[]);
+
+  function toggleValve(key){const next={...valves,[key]:!valves[key]};setCaps(prev=>doEqD4(prev,next));setValves(next);}
+  function toggleAll(){const a=Object.values(valves).every(Boolean);const next={m1:!a,m2:!a,m3:!a};setCaps(prev=>doEqD4(prev,next));setValves(next);}
+  function reset(){setCaps(D4_INIT.map(c=>({...c})));setValves({m1:false,m2:false,m3:false});}
+  function updateCap(i,field,val){setCaps(prev=>{const next=prev.map((c,idx)=>idx===i?{...c,[field]:val}:c);return Object.values(valves).some(Boolean)?doEqD4(next,valves):next;});}
+  function changeGas(i,newGas){setCaps(prev=>{const next=prev.map((c,idx)=>{if(idx!==i)return c;return newGas==="Boş"?{...c,gas:"Boş",mol:0}:{...c,gas:newGas};});return Object.values(valves).some(Boolean)?doEqD4(next,valves):next;});}
+
+  const pressures=caps.map(c=>(c.V>0&&c.mol>=0)?(c.mol*R*c.T)/c.V:0);
+  const allOpen=Object.values(valves).every(Boolean);
+  const anyOpen=Object.values(valves).some(Boolean);
+  const W=520,H=380;
+  const BASE_POS=[{cx:120,cy:135},{cx:400,cy:135},{cx:260,cy:285}];
+
+  function pipeEdge(a,b){
+    const r1=balloonRD4(caps[a].V),r2=balloonRD4(caps[b].V);
+    const dx=BASE_POS[b].cx-BASE_POS[a].cx,dy=BASE_POS[b].cy-BASE_POS[a].cy;
+    const dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;
+    return{x1:BASE_POS[a].cx+nx*(r1+5),y1:BASE_POS[a].cy+ny*(r1+5),x2:BASE_POS[b].cx-nx*(r2+5),y2:BASE_POS[b].cy-ny*(r2+5),mx:(BASE_POS[a].cx+BASE_POS[b].cx)/2,my:(BASE_POS[a].cy+BASE_POS[b].cy)/2};
+  }
+  const PIPES=[{...pipeEdge(0,1),key:"m1",label:"M1"},{...pipeEdge(1,2),key:"m2",label:"M2"},{...pipeEdge(0,2),key:"m3",label:"M3"}];
+
+  return (
+    <div style={{fontFamily:"'Inter',system-ui,sans-serif",background:"#f8fafc",padding:"16px 12px"}}>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>🫧 Düzenek 4 — Balon Sistemi</div>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Her balona direkt boru · M1: 1↔2 · M2: 2↔3 · M3: 1↔3 · Musluk açılınca basınç eşitleniyor</div>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
+        {[{key:"m1",label:"M1: 1↔2"},{key:"m2",label:"M2: 2↔3"},{key:"m3",label:"M3: 1↔3"}].map(({key,label})=>{const open=valves[key];return(<button key={key} onClick={()=>toggleValve(key)} style={{padding:"7px 16px",borderRadius:20,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:open?"#dcfce7":"#fee2e2",color:open?"#15803d":"#dc2626",outline:`2px solid ${open?"#22c55e":"#ef4444"}`}}>{label}: {open?"Açık":"Kapalı"}</button>);})}
+        <button onClick={toggleAll} style={{padding:"7px 16px",borderRadius:20,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:allOpen?"#fef3c7":"#dcfce7",color:allOpen?"#d97706":"#15803d",outline:`2px solid ${allOpen?"#f59e0b":"#22c55e"}`}}>{allOpen?"Tümünü Kapat":"Tümünü Aç"}</button>
+        <button onClick={reset} style={{padding:"7px 14px",borderRadius:20,border:"1.5px solid #e2e8f0",background:"white",color:"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}}>↺ Sıfırla</button>
+      </div>
+      <div style={{background:"white",borderRadius:16,border:"1px solid #e2e8f0",boxShadow:"0 2px 16px rgba(0,0,0,0.07)",marginBottom:14,overflow:"hidden"}}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:"block"}}>
+          {PIPES.map(p=>{const open=valves[p.key];return(<g key={p.key}><line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={open?"#22c55e":"#cbd5e1"} strokeWidth={open?4:3} strokeDasharray={open?"none":"8,5"}/><g onClick={()=>toggleValve(p.key)} style={{cursor:"pointer"}}><circle cx={p.mx} cy={p.my} r={15} fill={open?"#dcfce7":"#fee2e2"} stroke={open?"#22c55e":"#ef4444"} strokeWidth={2}/>{open?<rect x={p.mx-8} y={p.my-3} width={16} height={6} rx={3} fill="#22c55e"/>:<rect x={p.mx-3} y={p.my-8} width={6} height={16} rx={3} fill="#ef4444"/>}<text x={p.mx} y={p.my+29} textAnchor="middle" fill={open?"#15803d":"#dc2626"} fontSize={9} fontWeight={700}>{p.label}</text><text x={p.mx} y={p.my+39} textAnchor="middle" fill={open?"#15803d":"#dc2626"} fontSize={8}>{open?"Gaz Girişi":"Kapalı"}</text></g></g>);})}
+          {PIPES.map((p,pi)=>{if(!valves[p.key])return null;const t1=((tick+pi*20)%60)/60,t2=((tick+pi*20+30)%60)/60;return(<g key={"fp"+pi}><circle cx={p.x1+(p.x2-p.x1)*t1} cy={p.y1+(p.y2-p.y1)*t1} r={3.5} fill="#22c55e" opacity={0.85}/><circle cx={p.x1+(p.x2-p.x1)*t2} cy={p.y1+(p.y2-p.y1)*t2} r={2.5} fill="#4ade80" opacity={0.6}/></g>);})}
+          {BASE_POS.map((pos,i)=>{const c=caps[i];const isEmpty=c.gas==="Boş"||c.mol<0.005;const gObj=isEmpty?{color:"#94a3b8",bg:"#f1f5f9"}:gasInfoD24(c.gas);const r=balloonRD4(c.V);const P=pressures[i];const pColor=P<0.01?"#94a3b8":P>4?"#ef4444":"#16a34a";return(<g key={i}><ellipse cx={pos.cx+5} cy={pos.cy+8} rx={r*0.85} ry={r*0.5} fill="rgba(0,0,0,0.06)"/><circle cx={pos.cx} cy={pos.cy} r={r} fill={gObj.bg} stroke={gObj.color} strokeWidth={2.5}/><ellipse cx={pos.cx-r*0.28} cy={pos.cy-r*0.28} rx={r*0.2} ry={r*0.14} fill="white" opacity={0.55}/>{isEmpty?<text x={pos.cx} y={pos.cy+4} textAnchor="middle" fill="#94a3b8" fontSize={14} fontWeight={700}>Boş</text>:<text x={pos.cx} y={pos.cy-12} textAnchor="middle" fill={gObj.color} fontSize={15} fontWeight={900}>{c.gas}</text>}<text x={pos.cx} y={pos.cy+(isEmpty?20:5)} textAnchor="middle" fill="#64748b" fontSize={11} fontWeight={600}>{c.mol.toFixed(2)} mol</text><text x={pos.cx} y={pos.cy+(isEmpty?34:19)} textAnchor="middle" fill="#0ea5e9" fontSize={11} fontWeight={700}>{c.V.toFixed(2)} L</text><text x={pos.cx} y={pos.cy+(isEmpty?48:33)} textAnchor="middle" fill={pColor} fontSize={13} fontWeight={900}>{P.toFixed(3)} atm</text><circle cx={pos.cx} cy={pos.cy+r} r={5} fill={gObj.color} opacity={0.5}/><text x={pos.cx} y={pos.cy-r-12} textAnchor="middle" fill="#64748b" fontSize={11} fontWeight={700}>{i+1}. Kap</text></g>);})}
+          <text x={W/2} y={H-8} textAnchor="middle" fill="#cbd5e1" fontSize={9}>Musluğa tıkla → aç/kapat · Açık muslukların bağlı kapları basınç eşitler</text>
+        </svg>
+      </div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        {caps.map((c,i)=>{const P=pressures[i];const borderC=["#7c3aed","#0284c7","#be185d"][i];const bgC=["#faf5ff","#f0f9ff","#fff1f2"][i];return(<div key={i} style={{flex:"1 1 190px",background:bgC,borderRadius:14,padding:"12px 14px",border:`1.5px solid ${borderC}44`,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:14,fontWeight:800,color:borderC}}>{i+1}. Kap</span><span style={{fontSize:14,fontWeight:900,color:P<0.01?"#94a3b8":"#16a34a"}}>{P.toFixed(3)} atm</span></div>
+          <div style={{marginBottom:10}}><div style={{fontSize:10,color:"#94a3b8",marginBottom:5,fontWeight:600}}>GAZ CİNSİ</div><div style={{display:"flex",flexWrap:"wrap",gap:4}}>{[...GAS_LIST_D24.map(g=>g.label),"Boş"].map(g=>{const active=c.gas===g;const gObj=g==="Boş"?{color:"#94a3b8",bg:"#f1f5f9"}:gasInfoD24(g);return(<button key={g} onClick={()=>changeGas(i,g)} style={{padding:"3px 8px",borderRadius:12,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:active?gObj.bg:"white",color:active?gObj.color:"#cbd5e1",outline:active?`1.5px solid ${gObj.color}`:"1px solid #e2e8f0"}}>{g}</button>);})}</div></div>
+          {[{label:"n (mol)",field:"mol",min:0,max:2,step:0.01,color:"#7c3aed",fmt:2},{label:"V (L)",field:"V",min:0.5,max:10,step:0.1,color:"#0ea5e9",fmt:2},{label:"T (K)",field:"T",min:100,max:800,step:5,color:"#f59e0b",fmt:0}].map(({label,field,min,max,step,color,fmt})=>(<div key={field} style={{marginBottom:10}}><span style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{label}</span><div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}><input type="range" min={min} max={max} step={step} value={c[field]} onChange={e=>updateCap(i,field,parseFloat(e.target.value))} style={{flex:1,accentColor:color}}/><input type="number" min={min} max={max} step={step} value={Number(c[field]).toFixed(fmt)} onChange={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v>=min&&v<=max)updateCap(i,field,v);}} style={{width:58,padding:"3px 6px",borderRadius:8,border:`1.5px solid ${color}66`,color,fontWeight:700,fontSize:12,textAlign:"center",outline:"none",background:"white"}}/></div></div>))}
+        </div>);})}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// EĞİTİM
+// ══════════════════════════════════════════════════════════════
+function Egitim() {
+  const laws=[
+    {title:"Boyle Yasası",formula:"P₁V₁ = P₂V₂",note:"T sabit",color:"#f97316",steps:[{l:"V=2L",n:0.5,V:2,T:300},{l:"V=4L",n:0.5,V:4,T:300},{l:"V=6L",n:0.5,V:6,T:300},{l:"V=8L",n:0.5,V:8,T:300}]},
+    {title:"Charles Yasası",formula:"V₁/T₁ = V₂/T₂",note:"P sabit",color:"#3b82f6",steps:[{l:"T=150K",n:0.5,V:4,T:150},{l:"T=300K",n:0.5,V:8,T:300},{l:"T=450K",n:0.5,V:12,T:450},{l:"T=600K",n:0.5,V:16,T:600}]},
+    {title:"Gay-Lussac",formula:"P₁/T₁ = P₂/T₂",note:"V sabit",color:"#22c55e",steps:[{l:"T=200K",n:0.5,V:5,T:200},{l:"T=400K",n:0.5,V:5,T:400},{l:"T=600K",n:0.5,V:5,T:600},{l:"T=800K",n:0.5,V:5,T:800}]},
+  ];
+  return(
+    <div>
+      {laws.map(law=>(
+        <div key={law.title} style={{background:"white",borderRadius:10,padding:12,border:"1px solid #e2e8f0",marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:14,fontWeight:800,color:law.color}}>{law.title}</span>
+            <span style={{fontSize:11,fontFamily:"monospace",background:"#f8fafc",padding:"2px 8px",borderRadius:5}}>{law.formula}</span>
+            <span style={{fontSize:10,color:"#94a3b8"}}>{law.note}</span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <thead><tr>{["Adım","n(mol)","V(L)","T(K)","P(atm)","PV"].map(h=><th key={h} style={{padding:"3px 7px",color:"#94a3b8",textAlign:"left",fontWeight:600,borderBottom:"1px solid #f1f5f9"}}>{h}</th>)}</tr></thead>
+            <tbody>{law.steps.map(s=>{const P=(s.n*R*s.T)/s.V;return(<tr key={s.l}><td style={{padding:"3px 7px",color:law.color,fontWeight:700}}>{s.l}</td><td style={{padding:"3px 7px"}}>{s.n}</td><td style={{padding:"3px 7px",color:"#0ea5e9"}}>{s.V}</td><td style={{padding:"3px 7px",color:tempClr(s.T)}}>{s.T}</td><td style={{padding:"3px 7px",color:pClr(P),fontWeight:700}}>{P.toFixed(3)}</td><td style={{padding:"3px 7px"}}>{(P*s.V).toFixed(3)}</td></tr>);})}</tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// ROOT APP
+// ══════════════════════════════════════════════════════════════
+export default function App() {
+  const [tab,setTab]=useState("d1");
   return(
     <div style={{minHeight:"100vh",background:"#f0f4f8",fontFamily:"'Inter',system-ui,sans-serif",color:"#1e293b"}}>
-      {/* Header */}
-      <div style={{background:"white",borderBottom:"1px solid #e2e8f0",padding:"10px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
-        <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+      <div style={{background:"white",borderBottom:"1px solid #e2e8f0",padding:"8px 14px",position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{maxWidth:1000,margin:"0 auto",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontSize:16,fontWeight:800,color:"#1e293b",letterSpacing:-0.3}}>⚗️ Gaz Laboratuvarı</div>
-            <div style={{fontSize:9,color:"#94a3b8"}}>PV=nRT · Maxwell-Boltzmann · Van der Waals</div>
+            <div style={{fontSize:15,fontWeight:800,color:"#1e293b"}}>⚗️ Gaz Laboratuvarı</div>
+            <div style={{fontSize:9,color:"#94a3b8"}}>PV=nRT · İdeal Pistonlar · Gaz Yasaları</div>
           </div>
-          <div style={{display:"flex",gap:3,flexWrap:"wrap",marginLeft:"auto",background:"#f8fafc",borderRadius:10,padding:4,border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",gap:2,flexWrap:"wrap",marginLeft:"auto",background:"#f8fafc",borderRadius:10,padding:3,border:"1px solid #e2e8f0"}}>
             {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{
-                padding:"6px 12px",borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,transition:"all .15s",
-                background:tab===t.id?"white":"transparent",
-                color:tab===t.id?"#6366f1":"#94a3b8",
-                boxShadow:tab===t.id?"0 1px 3px rgba(0,0,0,0.1)":"none"
-              }}>{t.icon} {t.label}</button>
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 12px",borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===t.id?"white":"transparent",color:tab===t.id?"#6366f1":"#94a3b8",boxShadow:tab===t.id?"0 1px 3px rgba(0,0,0,0.1)":"none"}}>
+                {t.icon} {t.label}
+              </button>
             ))}
           </div>
         </div>
       </div>
-
-      {/* Content */}
-      <div style={{maxWidth:1100,margin:"0 auto",padding:"14px 12px"}}>
-        {tab==="sim"&&<SimTab chambers={chambers} setChambers={setChambers} numChambers={numChambers} setNumChambers={setNumChambers} leftOpen={leftOpen} setLeftOpen={setLeftOpen} rightOpen={rightOpen} setRightOpen={setRightOpen} leftP={leftP} setLeftP={setLeftP} rightP={rightP} setRightP={setRightP}/>}
-        {tab==="graphs"&&<GraphsTab chambers={chambers}/>}
-        {tab==="maxwell"&&<MaxwellTab/>}
-        {tab==="edu"&&<EduTab/>}
-        {tab==="realgas"&&<RealGasTab/>}
-      </div>
-
-      <div style={{textAlign:"center",padding:10,fontSize:9,color:"#cbd5e1"}}>
-        R=0.0821 L·atm/mol·K · Nₐ=6.022×10²³ · kB=1.38×10⁻²³ J/K
+      <div style={{maxWidth:1000,margin:"0 auto",padding:"12px"}}>
+        {tab==="d1"&&<Duzenek1/>}
+        {tab==="d2"&&<Duzenek2/>}
+        {tab==="d3"&&<Duzenek3/>}
+        {tab==="d4"&&<Duzenek4/>}
+        {tab==="edu"&&<Egitim/>}
       </div>
     </div>
   );
