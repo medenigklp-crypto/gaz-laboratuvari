@@ -722,8 +722,9 @@ function Duzenek3() {
         <text x={LEFT+Math.min(pistonX-LEFT,CW)/2} y={CY+CH/2+30} textAnchor="middle" fill="#0ea5e9" fontSize={12}>{pistonV.toFixed(3)} L</text>
         <rect x={LEFT-12} y={CY} width={12} height={CH} fill="#d1d5db" stroke="#94a3b8" strokeWidth={2}/>
         <ValveSVG x={LEFT-24} y={CY+CH/2} open={valveOpen} onClick={()=>setValveOpen(o=>!o)} label="M"/>
-        {["O","R","B","İ","T","A","L"].map((m,i) => {
-          const mx = LEFT+(i+0.5)*(CW/7);
+       {["A","B","C","D","E","F","G","H"].map((m,i) => {
+  const mx = LEFT+(i+0.5)*(CW/8);
+
           return <g key={m}>
             <line x1={mx} y1={CY+CH} x2={mx} y2={CY+CH+8} stroke="#94a3b8" strokeWidth={1.5}/>
             <text x={mx} y={CY+CH+18} textAnchor="middle" fill="#64748b" fontSize={10}>{m}</text>
