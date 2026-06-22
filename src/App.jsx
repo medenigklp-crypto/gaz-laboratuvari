@@ -515,22 +515,116 @@ function Duzenek2() {
         ))}
       </div>
 
-      {/* Boxes */}
+      {/* SVG Visualization */}
+      {(() => {
+        const SW=960, SH=300;
+        const BOX_W=160, BOX_H=180, BOX_Y=60;
+        const PIPE_W=40;
+        const totalW = computed.length*BOX_W + (computed.length-1)*PIPE_W;
+        const startX = (SW-totalW)/2;
+
+        function getBoxX(i) { return startX + i*(BOX_W+PIPE_W); }
+        function getPipeX(i) { return getBoxX(i) + BOX_W; }
+
+        // particles
+        function boxParticles(bx, col, mol, T, idx) {
+          const count = Math.max(4, Math.min(18, Math.round(mol*12)));
+          return Array.from({length:count},(_,i)=>{
+            const sp=0.15+(T/300)*0.35;
+            const seed=i*173.1+idx*700+animTick*sp;
+            const px=bx+16+((Math.sin(seed*0.61+i)*0.5+0.5)*(BOX_W-32));
+            const py=BOX_Y+16+((Math.cos(seed*0.43+i*1.3)*0.5+0.5)*(BOX_H-32));
+            return <circle key={i} cx={px} cy={py} r={5} fill={col.particle} opacity={0.65}/>;
+          });
+        }
+
+        return (
+          <svg viewBox={`0 0 ${SW} ${SH}`} width="100%" style={{display:"block",borderRadius:16,background:"white",border:"1px solid #e2e8f0",boxShadow:"0 4px 20px rgba(0,0,0,0.08)",marginBottom:8}}>
+            <defs>
+              <linearGradient id="ts2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="white" stopOpacity={0.5}/>
+                <stop offset="100%" stopColor="black" stopOpacity={0.05}/>
+              </linearGradient>
+            </defs>
+
+            {/* Pipes between boxes */}
+            {computed.map((_,i) => {
+              if(i>=computed.length-1) return null;
+              const px = getPipeX(i);
+              const cy = BOX_Y+BOX_H/2;
+              return (
+                <g key={i}>
+                  <line x1={px} y1={cy} x2={px+PIPE_W} y2={cy}
+                    stroke={valves[i]?"#22c55e":"#94a3b8"} strokeWidth={valves[i]?4:2.5}
+                    strokeDasharray={valves[i]?"":"6,3"}/>
+                </g>
+              );
+            })}
+
+            {/* Boxes */}
+            {computed.map((b,idx) => {
+              const bx = getBoxX(idx);
+              const col = COLORS[idx%4];
+              const isPiston = b.hasPiston;
+              // Piston position inside last box
+              const pistonRatio = isPiston ? Math.min(0.85, b.V/8) : 1;
+
+              return (
+                <g key={idx}>
+                  {/* Box background */}
+                  <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} fill={col.fill} stroke={col.stroke} strokeWidth={2} rx={8}/>
+                  {/* Piston line for last box */}
+                  {isPiston && <>
+                    <rect x={bx} y={BOX_Y} width={BOX_W*pistonRatio} height={BOX_H} fill={col.fill} rx={8}/>
+                    <rect x={bx+BOX_W*pistonRatio-6} y={BOX_Y} width={12} height={BOX_H} fill="#94a3b8" stroke="#64748b" strokeWidth={1.5} rx={3}/>
+                    <rect x={bx+BOX_W*pistonRatio+8} y={BOX_Y} width={BOX_W*(1-pistonRatio)-8} height={BOX_H} fill="#f1f5f9" rx={4}/>
+                    <text x={bx+BOX_W*0.8} y={BOX_Y+BOX_H/2} textAnchor="middle" fill="#94a3b8" fontSize={9}>P₀={P0}atm</text>
+                  </>}
+                  {/* Particles */}
+                  {boxParticles(bx, col, b.mol, b.T, idx)}
+                  {/* Box outline */}
+                  <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} fill="url(#ts2)" rx={8}/>
+                  <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} fill="none" stroke={col.stroke} strokeWidth={2} rx={8}/>
+                  {/* Labels */}
+                  <text x={bx+BOX_W/2} y={BOX_Y+26} textAnchor="middle" fill={col.particle} fontSize={16} fontWeight="900">{b.gas}</text>
+                  <text x={bx+BOX_W/2} y={BOX_Y+46} textAnchor="middle" fill="#475569" fontSize={10}>{b.mol.toFixed(3)} mol</text>
+                  <text x={bx+BOX_W/2} y={BOX_Y+62} textAnchor="middle" fill="#0ea5e9" fontSize={10}>{b.V.toFixed(2)} L</text>
+                  <text x={bx+BOX_W/2} y={BOX_Y+80} textAnchor="middle" fill={pClr(b.P)} fontSize={14} fontWeight="800">{b.P.toFixed(3)} atm</text>
+                  <text x={bx+BOX_W/2} y={BOX_Y+96} textAnchor="middle" fill={tempClr(b.T)} fontSize={10}>{b.T} K</text>
+                  {/* Box number */}
+                  <text x={bx+BOX_W/2} y={BOX_Y+BOX_H+18} textAnchor="middle" fill="#94a3b8" fontSize={9}>Kap {idx+1}</text>
+                  {/* Valve */}
+                  {idx < computed.length-1 && (
+                    <ValveSVG
+                      x={getPipeX(idx)+PIPE_W/2}
+                      y={BOX_Y+BOX_H/2}
+                      open={valves[idx]}
+                      onClick={()=>setValves(prev=>prev.map((x,i)=>i===idx?!x:x))}
+                      label={`M${idx+1}`}
+                    />
+                  )}
+                </g>
+              );
+            })}
+
+            <text x={SW/2} y={SH-6} textAnchor="middle" fill="#94a3b8" fontSize={9}>
+              Musluğa tıkla → aç/kapat · Musluk açılınca gazlar birleşir · Son kap pistonlu
+            </text>
+          </svg>
+        );
+      })()}
+
+      {/* Box editors */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
         {computed.map((b,idx) => {
           const col = COLORS[idx%4];
           return (
             <div key={idx} style={{flex:"1 1 160px",background:col.fill,borderRadius:12,padding:12,border:`2px solid ${col.stroke}`}}>
-              <div style={{fontSize:15,fontWeight:800,color:col.particle,marginBottom:6}}>{b.gas}</div>
-              <div style={{fontSize:11,color:"#64748b"}}>n = {b.mol.toFixed(3)} mol</div>
-              <div style={{fontSize:11,color:"#0ea5e9"}}>V = {b.V.toFixed(3)} L</div>
-              <div style={{fontSize:11,color:tempClr(b.T)}}>T = {b.T} K</div>
-              <div style={{fontSize:14,fontWeight:700,color:pClr(b.P),marginTop:4}}>P = {b.P.toFixed(3)} atm</div>
-              {b.hasPiston && <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>🔧 Pistonlu kap</div>}
-              <div style={{marginTop:8}}>
-                <Slider label="n" value={b.mol} min={0.05} max={5} step={0.05} unit="mol" color={col.particle} onChange={v=>setBoxes(prev=>prev.map((x,i)=>i===idx?{...x,mol:v}:x))}/>
-                <Slider label="T" value={b.T} min={50} max={1000} step={5} unit="K" color={tempClr(b.T)} onChange={v=>setBoxes(prev=>prev.map((x,i)=>i===idx?{...x,T:v}:x))}/>
-              </div>
+              <div style={{fontSize:14,fontWeight:800,color:col.particle,marginBottom:4}}>{b.gas} — Kap {idx+1}</div>
+              <div style={{fontSize:11,color:pClr(b.P),fontWeight:700,marginBottom:6}}>P = {b.P.toFixed(3)} atm</div>
+              {b.hasPiston && <div style={{fontSize:10,color:"#94a3b8",marginBottom:6}}>🔧 Pistonlu kap · P₀={P0} atm</div>}
+              <Slider label="n (mol)" value={b.mol} min={0.05} max={5} step={0.05} unit="mol" color={col.particle} onChange={v=>setBoxes(prev=>prev.map((x,i)=>i===idx?{...x,mol:v}:x))}/>
+              <Slider label="T (K)" value={b.T} min={50} max={1000} step={5} unit="K" color={tempClr(b.T)} onChange={v=>setBoxes(prev=>prev.map((x,i)=>i===idx?{...x,T:v}:x))}/>
             </div>
           );
         })}
@@ -704,4 +798,3 @@ export default function App() {
     </div>
   );
 }
-
