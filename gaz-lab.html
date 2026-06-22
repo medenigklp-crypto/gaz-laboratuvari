@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Gaz Lab"/>
+<title>⚗️ Gaz Laboratuvarı</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f8;color:#1e293b;min-height:100vh;}
+.header{background:white;border-bottom:1px solid #e2e8f0;padding:10px 14px;position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+.header-inner{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.logo{font-size:16px;font-weight:800;color:#1e293b;}
+.logo-sub{font-size:9px;color:#94a3b8;}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto;background:#f8fafc;border-radius:10px;padding:3px;border:1px solid #e2e8f0;}
+.tab-btn{padding:5px 10px;border-radius:7px;border:none;cursor:pointer;font-size:10px;font-weight:600;background:transparent;color:#94a3b8;transition:all .15s;white-space:nowrap;}
+.tab-btn.active{background:white;color:#6366f1;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+.content{max-width:1000px;margin:0 auto;padding:12px;}
+.panel{background:white;border-radius:12px;padding:12px 14px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.04);margin-bottom:10px;}
+.ctrl-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.sep{width:1px;height:22px;background:#e2e8f0;flex-shrink:0;}
+.badge{background:#f8fafc;border-radius:8px;padding:4px 10px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:4px;}
+.badge-lbl{font-size:9px;color:#94a3b8;}
+.badge-val{font-size:13px;font-weight:800;}
+button.pill{padding:3px 9px;border-radius:7px;border:none;cursor:pointer;font-size:10px;font-weight:700;transition:all .15s;}
+button.round{width:24px;height:24px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:700;}
+.svg-wrap{border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);margin-bottom:8px;background:white;border:1px solid #e2e8f0;}
+svg{display:block;width:100%;}
+.panel-tabs{display:flex;gap:4px;margin-bottom:6px;}
+.panel-tab{padding:5px 12px;border-radius:7px;border:none;cursor:pointer;font-size:10px;font-weight:600;transition:all .15s;}
+input[type=range]{-webkit-appearance:none;height:4px;border-radius:2px;background:#e2e8f0;outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;cursor:pointer;}
+input[type=number]{-webkit-appearance:none;-moz-appearance:textfield;}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+.slider-row{margin-bottom:8px;}
+.slider-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+.slider-lbl{font-size:10px;color:#64748b;}
+.slider-input-wrap{display:flex;align-items:center;gap:3px;}
+.slider-input{width:58px;padding:2px 5px;border-radius:5px;font-size:11px;font-weight:700;text-align:right;outline:none;background:#f8fafc;}
+.slider-unit{font-size:9px;color:#94a3b8;min-width:20px;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th{padding:3px 7px;color:#94a3b8;text-align:left;font-weight:600;border-bottom:1px solid #f1f5f9;}
+td{padding:3px 7px;}
+.hidden{display:none!important;}
+/* D2 specific */
+.box-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.gas-box{flex:1 1 140px;border-radius:12px;padding:12px;border:2px solid #e2e8f0;text-align:center;cursor:pointer;transition:all .2s;}
+.gas-box.selected{box-shadow:0 0 0 3px rgba(99,102,241,0.3);}
+/* D3 */
+.d3-info{background:#f8fafc;border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <div class="logo">⚗️ Gaz Laboratuvarı</div>
+      <div class="logo-sub">PV=nRT · İdeal Pistonlar · Gaz Yasaları</div>
+    </div>
+    <div class="tabs" id="mainTabs"></div>
+  </div>
+</div>
+<div class="content" id="mainContent"></div>
+
+<script>
+const R=0.0821, NA=6.022e23, KB=1.38e-23;
+
+// ── STATE ──────────────────────────────────────────
+const state = {
+  tab: "d1",
+  d1: {
+    numChambers: 3,
+    totalV: 10,
+    chambers: [],
+    leftOpen: false, rightOpen: false,
+    molAddL: 0.1, molAddR: 0.1,
+    selected: 0, showPanel: "edit",
+    animTick: 0
+  },
+  d2: {
+    boxes: [
+      {gas:"CH₄",mol:0,P:1.2,V:5,T:300,color:"#dbeafe",particle:"#1d4ed8"},
+      {gas:"He", mol:0,P:0.6,V:2,T:300,color:"#dcfce7",particle:"#15803d"},
+      {gas:"H₂", mol:0,P:1.6,V:3,T:300,color:"#fef9c3",particle:"#a16207"},
+      {gas:"Ne", mol:0,P:1.0,V:4,T:300,color:"#fce7f3",particle:"#be185d",hasPiston:true},
+    ],
+    valves: [false,false,false],
+    P0: 1.0,
+    animTick: 0
+  },
+  d3: {
+    gas: "O₂",
+    initMol: 0.5,
+    mol: 0.5,
+    T: 300,
+    cylinderV: 10,
+    pistonV: 2,
+    engel: 6,
+    engelHit: false,
+    valveOpen: false,
+    addMol: 0.1,
+    animTick: 0,
+    P0: 1.0
+  }
+};
+
+// Init d1 mols from PV=nRT
+function initD1() {
+  const d=state.d1;
+  const base=[
+    {gas:"X",T:300,color:"#dbeafe",particle:"#1d4ed8",stroke:"#93c5fd"},
+    {gas:"Y",T:300,color:"#dcfce7",particle:"#15803d",stroke:"#86efac"},
+    {gas:"Z",T:300,color:"#fef9c3",particle:"#a16207",stroke:"#fde047"},
+    {gas:"W",T:300,color:"#fce7f3",particle:"#be185d",stroke:"#f9a8d4"},
+  ].slice(0,d.numChambers);
+  const vEach=d.totalV/d.numChambers;
+  d.chambers=base.map(c=>({...c,mol:0.4,V:vEach}));
+  d.chambers=equilibrateD1(d.chambers,d.totalV);
+}
+initD1();
+
+// Init d2 mols
+function initD2() {
+  state.d2.boxes=state.d2.boxes.map(b=>({...b,mol:b.P*b.V/(R*b.T)}));
+}
+initD2();
+
+// Init d3
+function initD3() {
+  const d=state.d3;
+  d.mol=d.initMol;
+  d.pistonV=d.mol*R*d.T/d.P0;
+  d.engelHit=false;
+}
+initD3();
+
+// ── PHYSICS ───────────────────────────────────────
+function equilibrateD1(chambers, totalV) {
+  const weights=chambers.map(c=>c.mol*c.T);
+  const tw=weights.reduce((s,w)=>s+w,0);
+  if(tw<=0) return chambers;
+  return chambers.map((c,i)=>({...c,V:Math.max(0.05,(weights[i]/tw)*totalV)}));
+}
+
+function calcD1Pressure(chambers) {
+  if(!chambers.length||chambers[0].V<=0) return 0;
+  return (chambers[0].mol*R*chambers[0].T)/chambers[0].V;
+}
+
+// D2: merge boxes when valve opens
+function calcD2() {
+  const d=state.d2;
+  // Find connected groups
+  let groups=d.boxes.map((_,i)=>[i]);
+  for(let v=0;v<d.valves.length;v++) {
+    if(d.valves[v]) {
+      // merge group of v with group of v+1
+      const g1=groups.find(g=>g.includes(v));
+      const g2=groups.find(g=>g.includes(v+1));
+      if(g1!==g2) {
+        const merged=[...g1,...g2];
+        groups=groups.filter(g=>g!==g1&&g!==g2);
+        groups.push(merged);
+      }
+    }
+  }
+  // For each group calculate mixed state
+  const result=d.boxes.map(b=>({...b}));
+  groups.forEach(grp=>{
+    const totalMol=grp.reduce((s,i)=>s+d.boxes[i].mol,0);
+    let totalV=grp.reduce((s,i)=>s+d.boxes[i].V,0);
+    const avgT=grp.reduce((s,i)=>s+d.boxes[i].T*d.boxes[i].mol,0)/totalMol;
+    // Check if last box in group has piston
+    const hasP=grp.some(i=>d.boxes[i].hasPiston);
+    let P;
+    if(hasP) {
+      // pressure = P0, volume adjusts
+      P=d.P0;
+      totalV=totalMol*R*avgT/P;
+    } else {
+      P=totalMol*R*avgT/totalV;
+    }
+    // Distribute V proportionally to mol*T
+    const weights=grp.map(i=>d.boxes[i].mol*d.boxes[i].T);
+    const tw=weights.reduce((s,w)=>s+w,0);
+    grp.forEach((i,j)=>{
+      result[i].P=P;
+      result[i].V=tw>0?(weights[j]/tw)*totalV:totalV/grp.length;
+    });
+  });
+  return result;
+}
+
+// D3: when valve opens, add mol → piston moves
+function calcD3() {
+  const d=state.d3;
+  const P=d.P0;
+  // total V = pistonV
+  const V=d.mol*R*d.T/P;
+  return {P, V};
+}
+
+// ── HELPERS ───────────────────────────────────────
+function tempClr(T) {
+  const t=Math.max(0,Math.min(1,(T-50)/950));
+  return `hsl(${Math.round(240-t*240)},80%,45%)`;
+}
+function pClr(P) {
+  const t=Math.max(0,Math.min(1,P/5));
+  return `hsl(${Math.round(120-t*120)},70%,40%)`;
+}
+
+// ── SVG HELPERS ───────────────────────────────────
+function valve(x, y, open, label) {
+  const bc=open?"#15803d":"#b91c1c";
+  const hc=open?"#22c55e":"#ef4444";
+  return `
+    <rect x="${x-7}" y="${y-16}" width="14" height="32" rx="3" fill="#94a3b8" stroke="#64748b" stroke-width="1"/>
+    <ellipse cx="${x}" cy="${y}" rx="13" ry="13" fill="#d97706" stroke="#92400e" stroke-width="1.5"/>
+    <ellipse cx="${x}" cy="${y}" rx="10" ry="10" fill="#f59e0b"/>
+    <ellipse cx="${x-3}" cy="${y-3}" rx="3" ry="2" fill="white" opacity="0.35"/>
+    <circle cx="${x}" cy="${y}" r="4" fill="${bc}"/>
+    ${open
+      ? `<rect x="${x-10}" y="${y-3}" width="20" height="6" rx="3" fill="${hc}"/>`
+      : `<rect x="${x-3}" y="${y-10}" width="6" height="20" rx="3" fill="${hc}"/>`
+    }
+    <text x="${x}" y="${y-22}" text-anchor="middle" fill="${bc}" font-size="10" font-weight="800">${label}</text>
+    <text x="${x}" y="${y+30}" text-anchor="middle" fill="${bc}" font-size="8" font-weight="700">${open?"Gaz Girişi":"Kapalı"}</text>
+  `;
+}
+
+function piston(cx, y, h) {
+  return `
+    <defs>
+      <linearGradient id="pg" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#334155"/>
+        <stop offset="40%" stop-color="#94a3b8"/>
+        <stop offset="65%" stop-color="#e2e8f0"/>
+        <stop offset="100%" stop-color="#475569"/>
+      </linearGradient>
+      <linearGradient id="pgv" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="white" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.15"/>
+      </linearGradient>
+    </defs>
+    <ellipse cx="${cx}" cy="${y+h/2}" rx="13" ry="${h/2}" fill="url(#pg)" stroke="#334155" stroke-width="1.5"/>
+    <ellipse cx="${cx}" cy="${y+h/2}" rx="13" ry="${h/2}" fill="url(#pgv)"/>
+    <ellipse cx="${cx-4}" cy="${y+h/2}" rx="4" ry="${h/2-10}" fill="white" opacity="0.15"/>
+    <text x="${cx}" y="${y-9}" text-anchor="middle" fill="#94a3b8" font-size="8">İdeal</text>
+    <text x="${cx}" y="${y-2}" text-anchor="middle" fill="#94a3b8" font-size="8">Piston</text>
+  `;
+}
+
+function particles(rx, ry, rw, rh, color, mol, tick, idx) {
+  const count=Math.max(5,Math.min(25,Math.round(mol*14)));
+  let s="";
+  for(let i=0;i<count;i++) {
+    const sp=0.15+(300/300)*0.35;
+    const seed=i*173.1+idx*700+tick*sp;
+    const px=rx+24+((Math.sin(seed*0.61+i)*0.5+0.5)*(rw-48));
+    const py=ry+20+((Math.cos(seed*0.43+i*1.3)*0.5+0.5)*(rh-40));
+    s+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="5" fill="${color}" opacity="0.65"/>`;
+  }
+  return s;
+}
+
+// ── RENDER ────────────────────────────────────────
+function render() {
+  renderTabs();
+  renderContent();
+}
+
+function renderTabs() {
+  const tabs=[
+    {id:"d1",label:"🧪 Düzenek 1"},
+    {id:"d2",label:"🔗 Düzenek 2"},
+    {id:"d3",label:"🚧 Düzenek 3"},
+    {id:"sim",label:"🔬 Simülasyon"},
+    {id:"graphs",label:"📊 Grafikler"},
+    {id:"maxwell",label:"⚡ Maxwell"},
+    {id:"edu",label:"🎓 Eğitim"},
+    {id:"realgas",label:"⚗️ Gerçek Gaz"},
+  ];
+  document.getElementById("mainTabs").innerHTML=tabs.map(t=>
+    `<button class="tab-btn${state.tab===t.id?" active":""}" onclick="setTab('${t.id}')">${t.label}</button>`
+  ).join("");
+}
+
+function renderContent() {
+  const c=document.getElementById("mainContent");
+  if(state.tab==="d1") c.innerHTML=renderD1();
+  else if(state.tab==="d2") c.innerHTML=renderD2();
+  else if(state.tab==="d3") c.innerHTML=renderD3();
+  else if(state.tab==="sim") c.innerHTML=renderSim();
+  else if(state.tab==="graphs") c.innerHTML=renderGraphs();
+  else if(state.tab==="maxwell") c.innerHTML=renderMaxwell();
+  else if(state.tab==="edu") c.innerHTML=renderEdu();
+  else if(state.tab==="realgas") c.innerHTML=renderRealGas();
+}
+
+// ══════════════════════════════════════════════════
+// DÜZENEK 1
+// ══════════════════════════════════════════════════
+function renderD1() {
+  const d=state.d1;
+  const eq=equilibrateD1(d.chambers,d.totalV);
+  const P=calcD1Pressure(eq);
+  const totalMol=eq.reduce((s,c)=>s+c.mol,0);
+
+  const SW=960,SH=340,CY=55,CH=210,WALL=90,ATMO=90,ER=28;
+  const containerW=SW-WALL-ATMO;
+  const weights=eq.map(c=>c.mol*c.T);
+  const tw=weights.reduce((s,w)=>s+w,0);
+  const widths=eq.map((_,i)=>tw>0?(weights[i]/tw)*containerW:containerW/eq.length);
+  let xc=WALL;
+  const rects=widths.map(w=>{const x=xc;xc+=w;return{x,w,cx:x+w/2};});
+  const pistonXs=[]; let acc=WALL;
+  for(let i=0;i<eq.length-1;i++){acc+=widths[i];pistonXs.push(acc);}
+  const rightEdge=WALL+containerW;
+  const COLORS=[
+    {fill:"#dbeafe",stroke:"#93c5fd",particle:"#1d4ed8"},
+    {fill:"#dcfce7",stroke:"#86efac",particle:"#15803d"},
+    {fill:"#fef9c3",stroke:"#fde047",particle:"#a16207"},
+    {fill:"#fce7f3",stroke:"#f9a8d4",particle:"#be185d"},
+  ];
+
+  let chambersSVG="";
+  eq.forEach((c,idx)=>{
+    const r=rects[idx];
+    const col=COLORS[idx%4];
+    const isSel=d.selected===idx;
+    chambersSVG+=`
+      <rect x="${r.x}" y="${CY}" width="${r.w}" height="${CH}" fill="${col.fill}"/>
+      ${isSel?`<rect x="${r.x}" y="${CY}" width="${r.w}" height="${CH}" fill="${col.stroke}" opacity="0.1"/>`:""}
+      ${particles(r.x,CY,r.w,CH,col.particle,c.mol,d.animTick,idx)}
+      <text x="${r.cx}" y="${CY+30}" text-anchor="middle" fill="${col.particle}" font-size="20" font-weight="900">${c.gas}</text>
+      <text x="${r.cx}" y="${CY+52}" text-anchor="middle" fill="#475569" font-size="12">${c.mol.toFixed(2)} mol</text>
+      <text x="${r.cx}" y="${CY+70}" text-anchor="middle" fill="#0ea5e9" font-size="12">${c.V.toFixed(2)} L</text>
+      <text x="${r.cx}" y="${CY+92}" text-anchor="middle" fill="#6366f1" font-size="16" font-weight="800">${P.toFixed(3)} atm</text>
+      <text x="${r.cx}" y="${CY+110}" text-anchor="middle" fill="${tempClr(c.T)}" font-size="11">${c.T} K</text>
+      <rect x="${r.x+6}" y="${CY+CH-12}" width="${r.w-12}" height="7" rx="3.5" fill="${tempClr(c.T)}" opacity="0.55"/>
+      <rect x="${r.x}" y="${CY}" width="${r.w}" height="${CH}" fill="transparent" onclick="d1Select(${idx})" style="cursor:pointer"/>
+      ${isSel?`<rect x="${r.x}" y="${CY}" width="${r.w}" height="${CH}" fill="none" stroke="${col.stroke}" stroke-width="3" stroke-dasharray="10,5"/>`:""}
+      <text x="${r.cx}" y="${CY+CH+22}" text-anchor="middle" fill="#94a3b8" font-size="10">V = ${c.V.toFixed(2)} L</text>
+    `;
+  });
+
+  let pistonsSVG=pistonXs.map(px=>piston(px,CY,CH)).join("");
+  const leftCol=d.leftOpen?"#bbf7d0":"#e5e7eb";
+  const rightCol=d.rightOpen?"#bbf7d0":"#e5e7eb";
+
+  const svgContent=`
+    <defs>
+      <linearGradient id="ts1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="white" stop-opacity="0.6"/>
+        <stop offset="25%" stop-color="white" stop-opacity="0.08"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.06"/>
+      </linearGradient>
+      <marker id="a1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <path d="M0,0 L0,7 L7,3.5z" fill="#22c55e"/>
+      </marker>
+      <marker id="a1l" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto">
+        <path d="M7,0 L7,7 L0,3.5z" fill="#22c55e"/>
+      </marker>
+    </defs>
+    <rect x="${WALL-ER+4}" y="${CY+6}" width="${containerW+ER*2-8}" height="${CH-6}" rx="6" fill="rgba(0,0,0,0.06)"/>
+    <ellipse cx="${WALL}" cy="${CY+CH/2}" rx="${ER}" ry="${CH/2}" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5"/>
+    ${chambersSVG}
+    <line x1="${WALL}" y1="${CY}" x2="${rightEdge}" y2="${CY}" stroke="#94a3b8" stroke-width="2.5"/>
+    <line x1="${WALL}" y1="${CY+CH}" x2="${rightEdge}" y2="${CY+CH}" stroke="#94a3b8" stroke-width="2.5"/>
+    <rect x="${WALL}" y="${CY}" width="${containerW}" height="${CH}" fill="url(#ts1)"/>
+    <ellipse cx="${rightEdge}" cy="${CY+CH/2}" rx="${ER}" ry="${CH/2}" fill="#d1d5db" stroke="#9ca3af" stroke-width="1.5"/>
+    <ellipse cx="${rightEdge}" cy="${CY+CH/2}" rx="${ER*0.5}" ry="${CH/2*0.45}" fill="white" opacity="0.2"/>
+    <ellipse cx="${WALL}" cy="${CY+CH/2}" rx="${ER}" ry="${CH/2}" fill="${leftCol}" stroke="${d.leftOpen?"#86efac":"#9ca3af"}" stroke-width="2"/>
+    <text x="${WALL/2}" y="${CY+CH/2-14}" text-anchor="middle" fill="${d.leftOpen?"#15803d":"#94a3b8"}" font-size="13" font-weight="900">M₁</text>
+    <text x="${WALL/2}" y="${CY+CH/2+4}" text-anchor="middle" fill="${d.leftOpen?"#22c55e":"#94a3b8"}" font-size="9">${d.leftOpen?"Gaz Girişi":"Kapalı"}</text>
+    ${d.leftOpen?`<line x1="4" y1="${CY+CH/2}" x2="${WALL-ER-2}" y2="${CY+CH/2}" stroke="#22c55e" stroke-width="2.5" marker-end="url(#a1)"/>
+    <line x1="4" y1="${CY+CH/2-26}" x2="${WALL-ER-2}" y2="${CY+CH/2-26}" stroke="#22c55e" stroke-width="1" marker-end="url(#a1)" opacity="0.4"/>
+    <line x1="4" y1="${CY+CH/2+26}" x2="${WALL-ER-2}" y2="${CY+CH/2+26}" stroke="#22c55e" stroke-width="1" marker-end="url(#a1)" opacity="0.4"/>`:""}
+    <ellipse cx="${rightEdge}" cy="${CY+CH/2}" rx="${ER}" ry="${CH/2}" fill="${rightCol}" stroke="${d.rightOpen?"#86efac":"#9ca3af"}" stroke-width="2"/>
+    <text x="${rightEdge+ATMO/2}" y="${CY+CH/2-14}" text-anchor="middle" fill="${d.rightOpen?"#15803d":"#94a3b8"}" font-size="13" font-weight="900">M₂</text>
+    <text x="${rightEdge+ATMO/2}" y="${CY+CH/2+4}" text-anchor="middle" fill="${d.rightOpen?"#22c55e":"#94a3b8"}" font-size="9">${d.rightOpen?"Gaz Girişi":"Kapalı"}</text>
+    ${d.rightOpen?`<line x1="${rightEdge+ER+2}" y1="${CY+CH/2}" x2="${SW-4}" y2="${CY+CH/2}" stroke="#22c55e" stroke-width="2.5" marker-end="url(#a1l)"/>
+    <line x1="${rightEdge+ER+2}" y1="${CY+CH/2-26}" x2="${SW-4}" y2="${CY+CH/2-26}" stroke="#22c55e" stroke-width="1" marker-end="url(#a1l)" opacity="0.4"/>
+    <line x1="${rightEdge+ER+2}" y1="${CY+CH/2+26}" x2="${SW-4}" y2="${CY+CH/2+26}" stroke="#22c55e" stroke-width="1" marker-end="url(#a1l)" opacity="0.4"/>`:""}
+    ${pistonsSVG}
+    ${valve(WALL-ER,CY+CH/2,d.leftOpen,"M₁")}
+    ${valve(rightEdge+ER,CY+CH/2,d.rightOpen,"M₂")}
+    <text x="${SW/2}" y="${SH-6}" text-anchor="middle" fill="#94a3b8" font-size="9">
+      P₁=P₂=P₃=P₄=${P.toFixed(3)} atm · Toplam V=${d.totalV.toFixed(1)} L (sabit) · Bölmeye tıkla → seç
+    </text>
+  `;
+
+  const ch=eq[d.selected]||eq[0];
+  const cc=COLORS[d.selected%4];
+
+  let panelHTML="";
+  if(d.showPanel==="edit") {
+    panelHTML=`
+      <div class="panel" style="border-color:${cc.stroke}">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-size:12px;font-weight:700;color:#475569">Bölme ${d.selected+1} — Gaz Adı:</span>
+          <input value="${ch.gas}" oninput="d1UpdateGas(this.value)"
+            style="width:60px;padding:3px 7px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;font-weight:700;color:${cc.particle};background:#f8fafc;outline:none"/>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px">
+            ${sliderHTML("n (mol)",ch.mol,0.05,5,0.05,"mol","#6366f1",`d1Update('mol',v)`)}
+          </div>
+          <div style="flex:1;min-width:160px">
+            ${sliderHTML("T (K)",ch.T,50,1000,5,"K",tempClr(ch.T),`d1Update('T',v)`)}
+          </div>
+        </div>
+        <div style="margin-top:8px;background:#f8fafc;border-radius:8px;padding:8px 12px;font-size:11px;color:#64748b">
+          ⚠️ Hacim otomatik hesaplanır — basınç eşitliği korunur
+        </div>
+      </div>`;
+  } else if(d.showPanel==="pvnrt") {
+    let rows=eq.map((c,i)=>{
+      const cP=(c.mol*R*c.T)/c.V;
+      const ok=Math.abs(cP-P)<0.01;
+      return `<tr style="cursor:pointer;background:${i===d.selected?"#eff6ff":"transparent"}" onclick="d1Select(${i})">
+        <td style="color:#94a3b8;font-weight:700">${i+1}</td>
+        <td style="color:${COLORS[i%4].particle};font-weight:700">${c.gas}</td>
+        <td>${c.mol.toFixed(3)}</td>
+        <td style="color:#0ea5e9">${c.V.toFixed(3)}</td>
+        <td style="color:${tempClr(c.T)}">${c.T}</td>
+        <td style="color:#6366f1;font-weight:700">${cP.toFixed(4)}</td>
+        <td>${(c.mol*R*c.T).toFixed(3)}</td>
+        <td><span style="background:${ok?"#dcfce7":"#fee2e2"};color:${ok?"#16a34a":"#dc2626"};border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700">${ok?"✓":"✗"}</span></td>
+      </tr>`;
+    }).join("");
+    panelHTML=`<div class="panel"><div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px">PV=nRT · P=${P.toFixed(4)} atm</div>
+      <div style="overflow-x:auto"><table><thead><tr>${["#","Gaz","n","V(L)","T(K)","P=nRT/V","nRT","✓"].map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  } else {
+    let cards=eq.map((c,i)=>{
+      const col=COLORS[i%4];
+      return `<div style="flex:1 1 130px;background:${i===d.selected?col.fill+"aa":col.fill+"55"};border-radius:10px;padding:10px;border:1.5px solid ${i===d.selected?col.stroke:"transparent"};cursor:pointer" onclick="d1Select(${i})">
+        <div style="font-size:13px;font-weight:800;color:${col.particle};margin-bottom:4px">${c.gas} — ${i+1}</div>
+        <div style="font-size:11px;color:#64748b">n = ${c.mol.toFixed(3)} mol</div>
+        <div style="font-size:11px;color:#0ea5e9">V = ${c.V.toFixed(3)} L</div>
+        <div style="font-size:11px;color:${tempClr(c.T)}">T = ${c.T} K</div>
+        <div style="font-size:13px;font-weight:700;color:#6366f1;margin-top:4px">P = ${P.toFixed(3)} atm</div>
+      </div>`;
+    }).join("");
+    panelHTML=`<div class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap">${cards}</div>
+      <div style="margin-top:8px;background:#f8fafc;border-radius:8px;padding:8px 12px;font-size:11px;color:#64748b">n=${eq.reduce((s,c)=>s+c.mol,0).toFixed(3)} mol · V=${d.totalV.toFixed(2)} L · P=${P.toFixed(4)} atm</div></div>`;
+  }
+
+  return `
+    <div class="panel">
+      <div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:2px">🧪 Düzenek 1 — Yatay Silindir</div>
+      <div style="font-size:11px;color:#94a3b8">Toplam hacim sabittir · Tüm bölmelerde basınç eşittir · Pistonlar otomatik denge kurar</div>
+    </div>
+
+    <div class="panel">
+      <div class="ctrl-bar">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#94a3b8;font-weight:700">BÖLME</span>
+          ${[2,3,4].map(n=>`<button onclick="d1SetN(${n})" style="width:26px;height:26px;border-radius:13px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:${d.numChambers===n?"#6366f1":"#f1f5f9"};color:${d.numChambers===n?"white":"#94a3b8"}">${n}</button>`).join("")}
+        </div>
+        <div class="sep"></div>
+        <div class="badge"><span class="badge-lbl">Toplam V</span>
+          <input type="number" value="${d.totalV}" min="2" max="30" step="0.5" oninput="d1SetTotalV(this.value)"
+            style="width:50px;padding:1px 4px;border-radius:5px;border:1px solid #e2e8f0;font-size:12px;font-weight:700;text-align:right;color:#0ea5e9;background:#f8fafc;outline:none"/>
+          <span style="font-size:9px;color:#94a3b8">L</span>
+          <input type="range" min="2" max="30" step="0.5" value="${d.totalV}" oninput="d1SetTotalV(this.value)" style="width:60px;accent-color:#0ea5e9"/>
+        </div>
+        <div class="sep"></div>
+        <div class="badge"><span class="badge-lbl">Ortak P</span><span class="badge-val" style="color:#6366f1">${P.toFixed(3)} atm</span></div>
+        <div class="badge"><span class="badge-lbl">Toplam n</span><span class="badge-val" style="color:#22c55e">${totalMol.toFixed(2)} mol</span></div>
+        <div class="sep"></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#94a3b8;font-weight:700">M₁</span>
+          <button class="pill" onclick="d1ToggleLeft()" style="background:${d.leftOpen?"#dcfce7":"#f1f5f9"};color:${d.leftOpen?"#15803d":"#94a3b8"};outline:${d.leftOpen?"1.5px solid #22c55e":"none"}">${d.leftOpen?"Açık":"Kapalı"}</button>
+          ${d.leftOpen?`
+            <button class="round" onclick="d1RemoveLeft()" style="background:#fee2e2;color:#dc2626">−</button>
+            <span style="font-size:10px;color:#64748b;min-width:32px">${d.molAddL}mol</span>
+            <button class="round" onclick="d1AddLeft()" style="background:#dcfce7;color:#16a34a">+</button>
+            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddL}" oninput="d1SetMolL(this.value)" style="width:50px;accent-color:#22c55e"/>
+          `:""}
+        </div>
+        <div class="sep"></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#94a3b8;font-weight:700">M₂</span>
+          <button class="pill" onclick="d1ToggleRight()" style="background:${d.rightOpen?"#dcfce7":"#f1f5f9"};color:${d.rightOpen?"#15803d":"#94a3b8"};outline:${d.rightOpen?"1.5px solid #22c55e":"none"}">${d.rightOpen?"Açık":"Kapalı"}</button>
+          ${d.rightOpen?`
+            <button class="round" onclick="d1RemoveRight()" style="background:#fee2e2;color:#dc2626">−</button>
+            <span style="font-size:10px;color:#64748b;min-width:32px">${d.molAddR}mol</span>
+            <button class="round" onclick="d1AddRight()" style="background:#dcfce7;color:#16a34a">+</button>
+            <input type="range" min="0.05" max="1" step="0.05" value="${d.molAddR}" oninput="d1SetMolR(this.value)" style="width:50px;accent-color:#22c55e"/>
+          `:""}
+        </div>
+      </div>
+    </div>
+
+    <div class="svg-wrap">
+      <svg viewBox="0 0 ${SW} ${SH}">${svgContent}</svg>
+    </div>
+
+    <div class="panel-tabs">
+      ${[["edit","✏️ Düzenle"],["pvnrt","🔬 PV=nRT"],["table","📋 Tablo"]].map(([id,lbl])=>
+        `<button class="panel-tab" onclick="d1Panel('${id}')" style="background:${d.showPanel===id?"#e0e7ff":"#f1f5f9"};color:${d.showPanel===id?"#4338ca":"#94a3b8"}">${lbl}</button>`
+      ).join("")}
+    </div>
+    ${panelHTML}
+  `;
+}
+
+// ══════════════════════════════════════════════════
+// DÜZENEK 2
+// ══════════════════════════════════════════════════
+function renderD2() {
+  const d=state.d2;
+  const boxes=calcD2();
+  const SW=960,SH=300,BOX_Y=60,BOX_H=180,BOX_W=160,GAP=40;
+  const COLORS=[
+    {fill:"#dbeafe",stroke:"#93c5fd",particle:"#1d4ed8"},
+    {fill:"#dcfce7",stroke:"#86efac",particle:"#15803d"},
+    {fill:"#fef9c3",stroke:"#fde047",particle:"#a16207"},
+    {fill:"#fce7f3",stroke:"#f9a8d4",particle:"#be185d"},
+  ];
+  const startX=40;
+  const boxXs=boxes.map((_,i)=>startX+i*(BOX_W+GAP+20));
+  const valveXs=boxes.map((_,i)=>startX+BOX_W+i*(BOX_W+GAP+20)+10);
+
+  let svgContent=`
+    <defs>
+      <linearGradient id="ts2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.05"/>
+      </linearGradient>
+    </defs>
+  `;
+
+  // Pipe connections
+  for(let v=0;v<3;v++) {
+    const x1=boxXs[v]+BOX_W;
+    const x2=boxXs[v+1];
+    const cy=BOX_Y+BOX_H/2;
+    svgContent+=`<line x1="${x1}" y1="${cy}" x2="${x2}" y2="${cy}" stroke="${d.valves[v]?"#22c55e":"#94a3b8"}" stroke-width="${d.valves[v]?3:2}" stroke-dasharray="${d.valves[v]?"":"4,3"}"/>`;
+  }
+
+  // Boxes
+  boxes.forEach((b,idx)=>{
+    const bx=boxXs[idx];
+    const col=COLORS[idx%4];
+    // If last box with piston
+    if(b.hasPiston) {
+      // Draw cylinder with piston
+      const pistonX=bx+b.V*20;
+      svgContent+=`
+        <rect x="${bx}" y="${BOX_Y}" width="${BOX_W+40}" height="${BOX_H}" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" rx="8"/>
+        <rect x="${bx}" y="${BOX_Y}" width="${Math.min(b.V*18,BOX_W+36)}" height="${BOX_H}" fill="${col.fill}" rx="8"/>
+        ${particles(bx,BOX_Y,Math.min(b.V*18,BOX_W+36),BOX_H,col.particle,b.mol,d.animTick,idx)}
+        ${piston(bx+Math.min(b.V*18,BOX_W+36),BOX_Y,BOX_H)}
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+30}" text-anchor="middle" fill="${col.particle}" font-size="16" font-weight="900">${b.gas}</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+52}" text-anchor="middle" fill="#475569" font-size="11">${b.mol.toFixed(3)} mol</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+68}" text-anchor="middle" fill="#0ea5e9" font-size="11">${b.V.toFixed(2)} L</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+86}" text-anchor="middle" fill="${pClr(b.P)}" font-size="14" font-weight="800">${b.P.toFixed(3)} atm</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+102}" text-anchor="middle" fill="${tempClr(b.T)}" font-size="11">${b.T} K</text>
+        <text x="${bx+BOX_W*1.1}" y="${BOX_Y+BOX_H/2}" text-anchor="middle" fill="#94a3b8" font-size="10">P₀=${d.P0}atm</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+BOX_H+20}" text-anchor="middle" fill="#94a3b8" font-size="9">Pistonlu Kap</text>
+      `;
+    } else {
+      svgContent+=`
+        <rect x="${bx}" y="${BOX_Y}" width="${BOX_W}" height="${BOX_H}" fill="${col.fill}" stroke="${col.stroke}" stroke-width="2" rx="8"/>
+        ${particles(bx,BOX_Y,BOX_W,BOX_H,col.particle,b.mol,d.animTick,idx)}
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+30}" text-anchor="middle" fill="${col.particle}" font-size="16" font-weight="900">${b.gas}</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+52}" text-anchor="middle" fill="#475569" font-size="11">${b.mol.toFixed(3)} mol</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+68}" text-anchor="middle" fill="#0ea5e9" font-size="11">${b.V.toFixed(2)} L</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+86}" text-anchor="middle" fill="${pClr(b.P)}" font-size="14" font-weight="800">${b.P.toFixed(3)} atm</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+102}" text-anchor="middle" fill="${tempClr(b.T)}" font-size="11">${b.T} K</text>
+        <text x="${bx+BOX_W/2}" y="${BOX_Y+BOX_H+20}" text-anchor="middle" fill="#94a3b8" font-size="9">Kap ${idx+1}</text>
+      `;
+    }
+    // Valve between boxes
+    if(idx<3) {
+      const vx=valveXs[idx];
+      svgContent+=valve(vx,BOX_Y+BOX_H/2,d.valves[idx],`M${idx+1}`);
+      svgContent+=`<rect x="${vx-20}" y="${BOX_Y+BOX_H/2-20}" width="40" height="40" fill="transparent" style="cursor:pointer" onclick="d2ToggleValve(${idx})"/>`;
+    }
+  });
+
+  svgContent+=`<text x="${SW/2}" y="${SH-6}" text-anchor="middle" fill="#94a3b8" font-size="9">Musluğa tıkla → aç/kapat · Musluk açılınca gazlar birleşir · Son kap pistonlu → P=P₀</text>`;
+
+  return `
+    <div class="panel">
+      <div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:2px">🔗 Düzenek 2 — Ayrı Kutular</div>
+      <div style="font-size:11px;color:#94a3b8">Musluk açılınca kutular birleşir · Gazlar eşit basınçta denge kurar · Son kap pistonlu (P₀ ile denge)</div>
+    </div>
+
+    <div class="panel">
+      <div class="ctrl-bar">
+        <div class="badge"><span class="badge-lbl">P₀</span>
+          <input type="range" min="0.5" max="3" step="0.1" value="${d.P0}" oninput="d2SetP0(this.value)" style="width:70px;accent-color:#3b82f6"/>
+          <span class="badge-val" style="color:#3b82f6">${d.P0.toFixed(1)} atm</span>
+        </div>
+        <div class="sep"></div>
+        ${boxes.map((b,i)=>`
+          <div style="display:flex;gap:4px;align-items:center">
+            <span style="font-size:10px;color:#94a3b8;font-weight:700">${b.gas}</span>
+            <span style="font-size:11px;font-weight:700;color:${pClr(b.P)}">${b.P.toFixed(2)}atm</span>
+            <span style="font-size:10px;color:#0ea5e9">${b.V.toFixed(2)}L</span>
+          </div>
+          ${i<3?`<div class="sep"></div>`:""}
+        `).join("")}
+        <div style="margin-left:auto;display:flex;gap:4px">
+          ${[0,1,2].map(v=>`<button class="pill" onclick="d2ToggleValve(${v})" style="background:${d.valves[v]?"#dcfce7":"#fee2e2"};color:${d.valves[v]?"#16a34a":"#dc2626"};outline:${d.valves[v]?"1.5px solid #22c55e":"1.5px solid #ef4444"}">M${v+1}: ${d.valves[v]?"Açık":"Kapalı"}</button>`).join("")}
+        </div>
+      </div>
+    </div>
+
+    <div class="svg-wrap">
+      <svg viewBox="0 0 ${SW} ${SH}">${svgContent}</svg>
+    </div>
+
+    <div class="panel">
+      <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px">Kap Ayarları</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        ${state.d2.boxes.map((b,i)=>`
+          <div style="flex:1 1 180px;background:${COLORS[i%4].fill}55;border-radius:10px;padding:10px;border:1px solid ${COLORS[i%4].stroke}">
+            <div style="font-size:12px;font-weight:700;color:${COLORS[i%4].particle};margin-bottom:6px">${b.gas} — Kap ${i+1}</div>
+            ${sliderHTML("n (mol)",b.mol.toFixed(2),0.05,5,0.05,"mol","#6366f1",`d2Update(${i},'mol',v)`)}
+            ${sliderHTML("T (K)",b.T,50,1000,5,"K",tempClr(b.T),`d2Update(${i},'T',v)`)}
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════
+// DÜZENEK 3
+// ══════════════════════════════════════════════════
+function renderD3() {
+  const d=state.d3;
+  const P=d.P0;
+  const V=d.mol*R*d.T/P;
+  const engelV=d.engel;
+  const engelHit=V>=engelV;
+  const pistonPos=engelHit?engelV:V;
+  const finalP=engelHit?(d.mol*R*d.T)/engelV:P;
+
+  const SW=900,SH=280,CY=60,CH=160,LEFT=80,CW=720;
+  const scale=CW/12;
+  const pistonX=LEFT+pistonPos*scale;
+  const engelX=LEFT+engelV*scale;
+
+  // Ölçüm noktaları
+  const marks=["O","R","B","İ","T","A","L"];
+  const markStep=CW/7;
+
+  let svgContent=`
+    <defs>
+      <linearGradient id="ts3" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.05"/>
+      </linearGradient>
+    </defs>
+    <!-- Silindir gövdesi -->
+    <rect x="${LEFT}" y="${CY}" width="${CW}" height="${CH}" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" rx="4"/>
+    <!-- Gaz bölgesi -->
+    <rect x="${LEFT}" y="${CY}" width="${Math.min(pistonX-LEFT,CW)}" height="${CH}" fill="#bfdbfe" opacity="0.7" rx="4"/>
+    ${particles(LEFT,CY,Math.min(pistonX-LEFT,CW),CH,"#1d4ed8",d.mol,d.animTick,0)}
+    <!-- Shine -->
+    <rect x="${LEFT}" y="${CY}" width="${CW}" height="${CH}" fill="url(#ts3)"/>
+    <!-- Üst/alt çizgi -->
+    <line x1="${LEFT}" y1="${CY}" x2="${LEFT+CW}" y2="${CY}" stroke="#94a3b8" stroke-width="2.5"/>
+    <line x1="${LEFT}" y1="${CY+CH}" x2="${LEFT+CW}" y2="${CY+CH}" stroke="#94a3b8" stroke-width="2.5"/>
+    <!-- Engel -->
+    <rect x="${engelX-4}" y="${CY-10}" width="8" height="${CH+20}" fill="#334155" rx="2"/>
+    <text x="${engelX}" y="${CY-15}" text-anchor="middle" fill="#334155" font-size="10" font-weight="700">Engel</text>
+    <!-- Piston -->
+    ${piston(pistonX,CY,CH)}
+    <text x="${pistonX}" y="${CY-15}" text-anchor="middle" fill="#1d4ed8" font-size="10" font-weight="700">İdeal Piston</text>
+    <!-- P0 ok -->
+    <defs><marker id="a3" markerWidth="7" markerHeight="7" refX="1" refY="3.5" orient="auto"><path d="M7,0 L7,7 L0,3.5z" fill="#94a3b8"/></marker></defs>
+    <line x1="${LEFT+CW-10}" y1="${CY+CH/2}" x2="${pistonX+20}" y2="${CY+CH/2}" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a3)"/>
+    <text x="${LEFT+CW-5}" y="${CY+CH/2-6}" text-anchor="end" fill="#94a3b8" font-size="10">P₀ = ${d.P0} atm</text>
+    <!-- Ölçüm noktaları -->
+    ${marks.map((m,i)=>{
+      const mx=LEFT+(i+0.5)*markStep;
+      return `<line x1="${mx}" y1="${CY+CH}" x2="${mx}" y2="${CY+CH+8}" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="${mx}" y="${CY+CH+18}" text-anchor="middle" fill="#64748b" font-size="10">${m}</text>`;
+    }).join("")}
+    <!-- Sol duvar / musluk -->
+    <rect x="${LEFT-12}" y="${CY}" width="12" height="${CH}" fill="#d1d5db" stroke="#94a3b8" stroke-width="2"/>
+    ${valve(LEFT-24,CY+CH/2,d.valveOpen,"M")}
+    <!-- O3 ok -->
+    ${d.valveOpen?`<line x1="${LEFT-60}" y1="${CY+CH/2}" x2="${LEFT-38}" y2="${CY+CH/2}" stroke="#22c55e" stroke-width="2" marker-end="url(#a3)"/>
+    <text x="${LEFT-62}" y="${CY+CH/2-6}" text-anchor="end" fill="#22c55e" font-size="10">${d.gas} girişi</text>`:""}
+    <!-- Bilgi -->
+    <text x="${LEFT+Math.min(pistonX-LEFT,CW)/2}" y="${CY+CH/2-10}" text-anchor="middle" fill="#1e40af" font-size="13" font-weight="700">${d.gas}</text>
+    <text x="${LEFT+Math.min(pistonX-LEFT,CW)/2}" y="${CY+CH/2+10}" text-anchor="middle" fill="#1e40af" font-size="12">${d.mol.toFixed(3)} mol</text>
+    <text x="${LEFT+Math.min(pistonX-LEFT,CW)/2}" y="${CY+CH/2+28}" text-anchor="middle" fill="${pClr(finalP)}" font-size="14" font-weight="800">${finalP.toFixed(3)} atm</text>
+    <text x="${LEFT+Math.min(pistonX-LEFT,CW)/2}" y="${CY+CH/2+46}" text-anchor="middle" fill="#0ea5e9" font-size="12">${pistonPos.toFixed(2)} L</text>
+    <!-- Durum -->
+    <text x="${SW/2}" y="${SH-6}" text-anchor="middle" fill="${engelHit?"#ef4444":"#22c55e"}" font-size="10" font-weight="600">
+      ${engelHit?"🔴 Engele çarptı → Sabit Hacim (İzokor) → P artıyor":"🟢 Piston serbest → Sabit Basınç (İzobar) → V artıyor"}
+    </text>
+  `;
+
+  return `
+    <div class="panel">
+      <div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:2px">🚧 Düzenek 3 — Pistonlu + Engelli Silindir</div>
+      <div style="font-size:11px;color:#94a3b8">Musluktan gaz ekle → Engele kadar İzobar (P sabit, V artar) → Engelten sonra İzokor (V sabit, P artar)</div>
+    </div>
+
+    <div class="panel">
+      <div class="ctrl-bar">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#94a3b8;font-weight:700">GAZ</span>
+          ${["O₂","N₂","He","H₂","CO₂"].map(g=>`<button class="pill" onclick="d3SetGas('${g}')" style="background:${d.gas===g?"#dbeafe":"#f1f5f9"};color:${d.gas===g?"#1d4ed8":"#94a3b8"};outline:${d.gas===g?"1.5px solid #3b82f6":"none"}">${g}</button>`).join("")}
+        </div>
+        <div class="sep"></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#94a3b8;font-weight:700">Musluk M</span>
+          <button class="pill" onclick="d3ToggleValve()" style="background:${d.valveOpen?"#dcfce7":"#fee2e2"};color:${d.valveOpen?"#16a34a":"#dc2626"};outline:${d.valveOpen?"1.5px solid #22c55e":"1.5px solid #ef4444"}">${d.valveOpen?"Açık":"Kapalı"}</button>
+        </div>
+        ${d.valveOpen?`
+          <div class="sep"></div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span style="font-size:10px;color:#94a3b8">Ekle/Çıkar</span>
+            <button class="round" onclick="d3RemoveMol()" style="background:#fee2e2;color:#dc2626">−</button>
+            <span style="font-size:10px;color:#64748b;min-width:32px">${d.addMol}mol</span>
+            <button class="round" onclick="d3AddMol()" style="background:#dcfce7;color:#16a34a">+</button>
+            <input type="range" min="0.05" max="0.5" step="0.05" value="${d.addMol}" oninput="d3SetAddMol(this.value)" style="width:60px;accent-color:#22c55e"/>
+          </div>
+        `:""}
+        <div class="sep"></div>
+        <div class="badge"><span class="badge-lbl">P₀</span>
+          <input type="range" min="0.5" max="3" step="0.1" value="${d.P0}" oninput="d3SetP0(this.value)" style="width:60px;accent-color:#3b82f6"/>
+          <span class="badge-val" style="color:#3b82f6">${d.P0.toFixed(1)} atm</span>
+        </div>
+        <div class="sep"></div>
+        <div class="badge"><span class="badge-lbl">Engel</span>
+          <input type="range" min="2" max="10" step="0.5" value="${d.engel}" oninput="d3SetEngel(this.value)" style="width:60px;accent-color:#334155"/>
+          <span class="badge-val" style="color:#334155">${d.engel.toFixed(1)} L</span>
+        </div>
+        <button class="pill" onclick="d3Reset()" style="background:#fee2e2;color:#dc2626;margin-left:auto">↺ Sıfırla</button>
+      </div>
+    </div>
+
+    <div class="svg-wrap">
+      <svg viewBox="0 0 ${SW} ${SH}">${svgContent}</svg>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${sliderHTML("n başlangıç (mol)",d.initMol,0.1,3,0.1,"mol","#6366f1","d3SetInitMol(v)")}
+        ${sliderHTML("T (K)",d.T,50,1000,5,"K",tempClr(d.T),"d3SetT(v)")}
+      </div>
+      <div class="d3-info" style="margin-top:8px">
+        <b>Mevcut:</b> n=${d.mol.toFixed(3)} mol · V=${pistonPos.toFixed(3)} L · P=${finalP.toFixed(3)} atm · T=${d.T} K<br/>
+        <b>Durum:</b> ${engelHit?"🔴 İzokor — V="+engelV.toFixed(1)+"L (sabit), P="+finalP.toFixed(3)+"atm":"🟢 İzobar — P="+P.toFixed(2)+"atm (sabit), V="+pistonPos.toFixed(3)+"L"}<br/>
+        <b>Engel konumu:</b> ${engelV.toFixed(1)} L &nbsp;|&nbsp; <b>P₀:</b> ${d.P0} atm
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════
+// SİMÜLASYON (simple version)
+// ══════════════════════════════════════════════════
+function renderSim() {
+  return `<div class="panel"><div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:6px">🔬 Simülasyon</div>
+    <div style="font-size:12px;color:#64748b">Genel amaçlı gaz simülasyonu — Düzenek 1, 2 ve 3 sekmelerinde özel düzenekler mevcuttur.</div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="setTab('d1')" style="padding:10px 16px;border-radius:9px;border:none;cursor:pointer;background:#dbeafe;color:#1d4ed8;font-weight:700;font-size:13px">🧪 Düzenek 1'e Git</button>
+      <button onclick="setTab('d2')" style="padding:10px 16px;border-radius:9px;border:none;cursor:pointer;background:#dcfce7;color:#15803d;font-weight:700;font-size:13px">🔗 Düzenek 2'ye Git</button>
+      <button onclick="setTab('d3')" style="padding:10px 16px;border-radius:9px;border:none;cursor:pointer;background:#fef9c3;color:#a16207;font-weight:700;font-size:13px">🚧 Düzenek 3'e Git</button>
+    </div>
+    <div style="margin-top:16px;background:#f8fafc;border-radius:10px;padding:14px;font-size:12px;line-height:2;color:#64748b">
+      <b style="color:#1e293b">Gaz Yasaları Özeti</b><br/>
+      📦 Boyle: P₁V₁ = P₂V₂ (T sabit)<br/>
+      🌡️ Charles: V₁/T₁ = V₂/T₂ (P sabit)<br/>
+      🔥 Gay-Lussac: P₁/T₁ = P₂/T₂ (V sabit)<br/>
+      ⚗️ İdeal Gaz: PV = nRT (R = 0.0821 L·atm/mol·K)<br/>
+      🌬️ Dalton: P_top = P₁ + P₂ + P₃ + ...
+    </div>
+  </div>`;
+}
+
+function renderGraphs() {
+  return `<div class="panel"><div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:6px">📊 Grafikler</div>
+    <div style="font-size:12px;color:#64748b">Grafik özelliği yakında eklenecek. Şu an Düzenek sekmelerindeki anlık değerleri takip edebilirsiniz.</div></div>`;
+}
+
+function renderMaxwell() {
+  return `<div class="panel"><div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:6px">⚡ Maxwell-Boltzmann</div>
+    <div style="font-size:12px;color:#64748b">Hız dağılımı grafiği yakında eklenecek.</div></div>`;
+}
+
+function renderEdu() {
+  const laws=[
+    {title:"Boyle Yasası",formula:"P₁V₁ = P₂V₂",note:"Sıcaklık sabit",color:"#f97316",
+     steps:[{l:"V=2L",n:0.5,V:2,T:300},{l:"V=4L",n:0.5,V:4,T:300},{l:"V=6L",n:0.5,V:6,T:300},{l:"V=8L",n:0.5,V:8,T:300}]},
+    {title:"Charles Yasası",formula:"V₁/T₁ = V₂/T₂",note:"Basınç sabit",color:"#3b82f6",
+     steps:[{l:"T=150K",n:0.5,V:4,T:150},{l:"T=300K",n:0.5,V:8,T:300},{l:"T=450K",n:0.5,V:12,T:450},{l:"T=600K",n:0.5,V:16,T:600}]},
+    {title:"Gay-Lussac",formula:"P₁/T₁ = P₂/T₂",note:"Hacim sabit",color:"#22c55e",
+     steps:[{l:"T=200K",n:0.5,V:5,T:200},{l:"T=400K",n:0.5,V:5,T:400},{l:"T=600K",n:0.5,V:5,T:600},{l:"T=800K",n:0.5,V:5,T:800}]},
+  ];
+  const rows=laws.map(law=>`
+    <div style="background:white;border-radius:10px;padding:12px;border:1px solid #e2e8f0;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+        <div>
+          <span style="font-size:14px;font-weight:800;color:${law.color}">${law.title}</span>
+          <span style="font-size:11px;font-family:monospace;background:#f8fafc;padding:2px 8px;border-radius:5px;margin-left:8px">${law.formula}</span>
+          <span style="font-size:10px;color:#94a3b8;margin-left:6px">${law.note}</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>${["Adım","n(mol)","V(L)","T(K)","P(atm)","PV"].map(h=>`<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>${law.steps.map(s=>{
+          const P=(s.n*R*s.T)/s.V;
+          return `<tr>
+            <td style="color:${law.color};font-weight:700">${s.l}</td>
+            <td>${s.n}</td>
+            <td style="color:#0ea5e9">${s.V}</td>
+            <td style="color:${tempClr(s.T)}">${s.T}</td>
+            <td style="color:${pClr(P)};font-weight:700">${P.toFixed(3)}</td>
+            <td>${(P*s.V).toFixed(3)}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+    </div>
+  `).join("");
+  return `<div class="panel"><div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:10px">🎓 Eğitim Modu — Gaz Yasaları</div></div>${rows}`;
+}
+
+function renderRealGas() {
+  return `<div class="panel"><div style="font-size:15px;font-weight:800;color:#1e293b;margin-bottom:6px">⚗️ Gerçek Gaz — Van der Waals</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">(P + a·n²/V²)(V − n·b) = nRT</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${[{g:"He",a:0.034,b:0.0237,c:"#ef4444"},{g:"N₂",a:1.39,b:0.0391,c:"#eab308"},{g:"CO₂",a:3.59,b:0.0427,c:"#ec4899"},{g:"CH₄",a:2.25,b:0.0428,c:"#3b82f6"}].map(g=>`
+        <div style="flex:1 1 160px;background:#f8fafc;border-radius:10px;padding:10px;border:1px solid #e2e8f0">
+          <div style="font-size:13px;font-weight:800;color:${g.c};margin-bottom:6px">${g.g}</div>
+          <div style="font-size:11px;color:#64748b">a = ${g.a} L²·atm/mol²</div>
+          <div style="font-size:11px;color:#64748b">b = ${g.b} L/mol</div>
+        </div>
+      `).join("")}
+    </div>
+  </div>`;
+}
+
+// ── SLIDER HTML ────────────────────────────────────
+// Number input: commit on blur/Enter only (user can type freely)
+// Range: update immediately
+let _slId = 0;
+function sliderHTML(label, value, min, max, step, unit, color, onchange) {
+  const id = 'sl' + (++_slId);
+  // escape onchange for attribute context
+  const oc = onchange.replace(/"/g,"'");
+  return `
+    <div class="slider-row">
+      <div class="slider-top">
+        <span class="slider-lbl">${label}</span>
+        <div class="slider-input-wrap">
+          <input type="number" id="${id}n" class="slider-input" min="${min}" max="${max}" step="${step}" value="${value}"
+            style="border:1px solid #e2e8f0;color:${color}"
+            onkeydown="if(event.key==='Enter'){applySlider('${id}',${min},${max},'${oc}');this.blur();}"
+            onblur="applySlider('${id}',${min},${max},'${oc}');"/>
+          <span class="slider-unit">${unit}</span>
+        </div>
+      </div>
+      <input type="range" id="${id}r" min="${min}" max="${max}" step="${step}" value="${value}"
+        style="width:100%;accent-color:${color}"
+        oninput="syncSlider('${id}','${oc}');"/>
+    </div>
+  `;
+}
+function applySlider(id, min, max, oc) {
+  var n = document.getElementById(id+'n');
+  if(!n) return;
+  var v = parseFloat(n.value);
+  if(isNaN(v)) return;
+  v = Math.max(min, Math.min(max, v));
+  n.value = v;
+  var r = document.getElementById(id+'r');
+  if(r) r.value = v;
+  try { (new Function('v', oc))(v); } catch(e) { console.log(e); }
+}
+function syncSlider(id, oc) {
+  var r = document.getElementById(id+'r');
+  if(!r) return;
+  var v = parseFloat(r.value);
+  var n = document.getElementById(id+'n');
+  if(n) n.value = v;
+  try { (new Function('v', oc))(v); } catch(e) { console.log(e); }
+}
+
+// ── EVENT HANDLERS ────────────────────────────────
+function setTab(t) { state.tab=t; render(); }
+
+// D1
+function d1SetN(n) {
+  state.d1.numChambers=n;
+  const base=[
+    {gas:"X",T:300},{gas:"Y",T:300},{gas:"Z",T:300},{gas:"W",T:300}
+  ].slice(0,n);
+  const vEach=state.d1.totalV/n;
+  state.d1.chambers=base.map(c=>({...c,mol:0.4,V:vEach,
+    color:"",particle:"",stroke:""}));
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  state.d1.selected=0;
+  render();
+}
+function d1SetTotalV(v) {
+  state.d1.totalV=parseFloat(v)||10;
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+function d1Select(i) { state.d1.selected=i; render(); }
+function d1Panel(p) { state.d1.showPanel=p; render(); }
+function d1Update(key,v) {
+  const val=parseFloat(v);
+  if(isNaN(val))return;
+  const i=state.d1.selected;
+  state.d1.chambers=state.d1.chambers.map((c,j)=>j===i?{...c,[key]:Math.max(key==="mol"?0.01:50,val)}:c);
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+function d1UpdateGas(v) {
+  const i=state.d1.selected;
+  state.d1.chambers=state.d1.chambers.map((c,j)=>j===i?{...c,gas:v}:c);
+  // Don't re-render on every keystroke to avoid losing focus
+}
+function d1ToggleLeft() { state.d1.leftOpen=!state.d1.leftOpen; render(); }
+function d1ToggleRight() { state.d1.rightOpen=!state.d1.rightOpen; render(); }
+function d1SetMolL(v) { state.d1.molAddL=parseFloat(v); render(); }
+function d1SetMolR(v) { state.d1.molAddR=parseFloat(v); render(); }
+function d1AddLeft() {
+  if(!state.d1.leftOpen)return;
+  state.d1.chambers[0].mol=Math.max(0.01,state.d1.chambers[0].mol+state.d1.molAddL);
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+function d1RemoveLeft() {
+  if(!state.d1.leftOpen)return;
+  state.d1.chambers[0].mol=Math.max(0.01,state.d1.chambers[0].mol-state.d1.molAddL);
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+function d1AddRight() {
+  if(!state.d1.rightOpen)return;
+  const n=state.d1.chambers.length-1;
+  state.d1.chambers[n].mol=Math.max(0.01,state.d1.chambers[n].mol+state.d1.molAddR);
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+function d1RemoveRight() {
+  if(!state.d1.rightOpen)return;
+  const n=state.d1.chambers.length-1;
+  state.d1.chambers[n].mol=Math.max(0.01,state.d1.chambers[n].mol-state.d1.molAddR);
+  state.d1.chambers=equilibrateD1(state.d1.chambers,state.d1.totalV);
+  render();
+}
+
+// D2
+function d2ToggleValve(i) { state.d2.valves[i]=!state.d2.valves[i]; render(); }
+function d2SetP0(v) { state.d2.P0=parseFloat(v); render(); }
+function d2Update(i,key,v) {
+  const val=parseFloat(v); if(isNaN(val))return;
+  state.d2.boxes[i][key]=Math.max(0.01,val);
+  render();
+}
+
+// D3
+function d3SetGas(g) { state.d3.gas=g; render(); }
+function d3ToggleValve() { state.d3.valveOpen=!state.d3.valveOpen; render(); }
+function d3AddMol() {
+  if(!state.d3.valveOpen)return;
+  state.d3.mol=Math.max(0.01,state.d3.mol+state.d3.addMol);
+  render();
+}
+function d3RemoveMol() {
+  if(!state.d3.valveOpen)return;
+  state.d3.mol=Math.max(0.01,state.d3.mol-state.d3.addMol);
+  render();
+}
+function d3SetAddMol(v) { state.d3.addMol=parseFloat(v); render(); }
+function d3SetP0(v) { state.d3.P0=parseFloat(v); render(); }
+function d3SetEngel(v) { state.d3.engel=parseFloat(v); render(); }
+function d3SetInitMol(v) { state.d3.initMol=parseFloat(v)||0.5; render(); }
+function d3SetT(v) { state.d3.T=parseFloat(v)||300; render(); }
+function d3Reset() { state.d3.mol=state.d3.initMol; state.d3.valveOpen=false; render(); }
+
+// ── ANIMATION LOOP ────────────────────────────────
+setInterval(()=>{
+  state.d1.animTick++;
+  state.d2.animTick++;
+  state.d3.animTick++;
+  if(state.tab==="d1"||state.tab==="d2"||state.tab==="d3") renderContent();
+},80);
+
+// Initial render
+render();
+</script>
+</body>
+</html>
